@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HACKER_SHOOTER // ROOT_ACCESS</title>
+    <link rel="stylesheet" href="game.css">
+</head>
+
+<body>
+    <div id="game-container">
+        <!-- BACKGROUND DECOR (TERMINAL LOGS) -->
+        <div id="terminal-bg"
+            style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0.1; font-size:10px; pointer-events:none;">
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- HUD -->
+        <div id="side-hud" class="hidden">
+            <div class="stats-panel">
+                <div>SYSTEM.INTEGRITY</div>
+                <div id="hp-container">
+                    <div id="hp-bar"></div>
+                </div>
+                <div style="margin-top:10px;">UPTIME: <span id="score-count">00:00</span></div>
+            </div>
+            <div class="stats-panel" style="text-align:right;">
+                <div>ACTIVE_WEAPON</div>
+                <div id="weapon-mode" style="color:#0ff; font-weight:bold;">[ LASER ]</div>
+                <div style="font-size:0.6rem; margin-top:5px;">(SPACE: TOGGLE)</div>
+            </div>
+        </div>
+
+        <!-- NOTIFICATION LOG -->
+        <div id="log-container"
+            style="position:absolute; bottom:80px; left:10px; width:200px; pointer-events:none; z-index:40;"></div>
+
+        <!-- HOME SCREEN -->
+        <div id="home-screen" class="overlay">
+            <h1 id="title-logo">HACKER_SHOOTER<span>// INITIALIZING ROOT_ACCESS...</span></h1>
+            <div id="best-time">MAX_UPTIME: <span id="best-value">00:00</span></div>
+            <div class="menu-buttons">
+                <button id="start-btn">BOOT_SYSTEM</button>
+                <button id="nav-char">SYS_CONFIG</button>
+                <button id="nav-shop">WPN_UPGRADE</button>
+            </div>
+        </div>
+
+        <!-- MODALS -->
+        <div id="char-menu" class="modal hidden">
+            <div class="modal-header">SYSTEM_CONFIGURATION</div>
+            <p style="font-size:0.8rem; color:#008f11;">// WARNING: MODULES_NOT_FOUND</p>
+            <button class="close-modal">RETURN</button>
+        </div>
+
+        <div id="shop-menu" class="modal hidden">
+            <div class="modal-header">WEAPON_UPGRADES</div>
+            <p style="font-size:0.8rem; color:#008f11;">// ACCESS_DENIED: INSUFFICIENT_CREDITS</p>
+            <button class="close-modal">RETURN</button>
+        </div>
+
+        <!-- HACKING CONSOLE (SCRATCH STYLE) -->
+        <div id="hacking-console">
+            <div class="console-header">// INJECTING_EXPLOIT... (TARGET_OBJ: <span id="target-id">####</span>)</div>
+            <div id="block-editor">
+                <div class="hack-block motion" id="block-speed">
+                    <span class="block-label">移動速度 を</span>
+                    <span class="block-value-box" id="val-speed">通常</span>
+                    <span class="block-label"> にする</span>
+                </div>
+                <div class="hack-block control" id="block-target">
+                    <span class="block-label">攻撃対象 を</span>
+                    <span class="block-value-box" id="val-target">敵</span>
+                    <span class="block-label"> にする</span>
+                </div>
+                <div class="hack-block looks" id="block-size">
+                    <span class="block-label">機体サイズ を</span>
+                    <span class="block-value-box" id="val-size">通常</span>
+                    <span class="block-label"> にする</span>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:5px;">
+                <button id="apply-hack"
+                    style="font-size:0.6rem; padding:4px 10px; background:#00ff41; color:#000;">EXECUTE_CODE</button>
+                <button id="cancel-hack" style="font-size:0.6rem; padding:4px 10px;">DISCONNECT</button>
+            </div>
+        </div>
+
+        <!-- CONTROLS GUIDE -->
+        <div id="controls-guide">
+            <div><span class="guide-key">A</span> LASER (通常攻撃)</div>
+            <div><span class="guide-key">S</span> HACK (ハッキング弾)</div>
+            <div><span class="guide-key">←→</span> MOVE</div>
+        </div>
+
+        <!-- GAME OVER -->
+        <div id="overlay" class="overlay hidden">
+            <h2 style="font-size:2rem; color:#f00;">SYSTEM_CRASH</h2>
+            <p id="final-score">TOTAL_UPTIME: 00:00</p>
+            <div class="menu-buttons" style="margin-top:20px;">
+                <button id="retry-button">REBOOT</button>
+                <button id="back-home-button">TERMINATE</button>
+            </div>
+        </div>
+
+        <!-- MOBILE CONTROLS (Placeholder) -->
+        <div id="mobile-controls" class="hidden">
+            <div id="joystick-zone"></div>
+            <div id="shoot-btn">FIRE</div>
+            <div id="hack-btn">HACK</div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+
+</html>
