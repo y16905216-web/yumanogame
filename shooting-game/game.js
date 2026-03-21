@@ -993,12 +993,15 @@ function showTowerFloorSelect() {
             </div>
         `;
         const startFn = (e) => {
-            if (e) e.stopPropagation();
-            console.log("Floor card clicked:", opt);
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            console.log("Floor start triggered for:", opt.difficulty);
             TowerManager.startFloor(opt);
         };
         card.onclick = startFn;
-        // card.ontouchstart = (e) => { ... }; // Remove problematic touch listener
+        card.addEventListener('touchend', startFn); // 念のため touchend も追加
         container.appendChild(card);
     });
 }
@@ -1126,6 +1129,7 @@ const modeData = {
             isEasyMode = false;
             towerState.currentFloor = 1;
             towerState.bits = towerState.permanentUpgrades.initialBits;
+            hackingStack = []; // タワーモード開始時にスタックをリセット
             showTowerFloorSelect();
         }
     },
@@ -1163,6 +1167,7 @@ function selectMode(mode) {
 function openHackingScreen() {
     if (isHacking || gameOver || !gameActive) return;
     isHacking = true;
+    document.getElementById('hacking-console').classList.remove('hidden'); // hiddenを解除
     keys['s'] = false; keys['S'] = false;
 
     // Phase 3: Reset usage counts per session
@@ -1205,6 +1210,7 @@ function openHackingScreen() {
 
 function closeHackingScreen() {
     isHacking = false;
+    document.getElementById('hacking-console').classList.add('hidden'); // hiddenを追加
     document.getElementById('hacking-console').classList.remove('active');
 }
 
@@ -2209,6 +2215,7 @@ function startGame() {
     gameOver = false;
     gameActive = true;
     isHacking = false;
+    hackingStack = []; // 通常モード開始時にスタックをリセット
     player.x = canvas.width / 2;
     player.y = canvas.height / 2;
     

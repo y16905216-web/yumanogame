@@ -1000,6 +1000,8 @@ button:hover::after {
     overflow: hidden;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    pointer-events: auto; /* 明示的に有効化 */
+    z-index: 10;
 }
 
 .floor-card:hover, .floor-card:active {
