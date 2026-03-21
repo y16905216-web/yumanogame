@@ -134,7 +134,7 @@ let hackingStack = [];
 let activeLoadout = JSON.parse(localStorage.getItem('hacker_shooter_loadout')) || []; // 編成セット
 const MAX_LOADOUT_SIZE = 20;
 const MAX_STACK_ACTIONS = 5;
-const MAX_HACK_MEMORY = 400; // MB
+let MAX_HACK_MEMORY = 400; // MB
 let currentHackMemory = 0;
 
 // 編成の初期化 (空ならスターターを入れる)
@@ -1720,10 +1720,14 @@ class Boss extends Enemy {
     die() {
         createExplosion(this.x, this.y, '#f0f', 50);
         bossesDefeated++;
+        MAX_HACK_MEMORY += 50; // ボス討伐でメモリ拡張
+        updateUI();
+
         if (bossesDefeated >= 3) {
             gameClear();
         } else {
             addLog(`BOSS_DESTROYED: [${this.name}]`, 'hack');
+            addLog(`SYSTEM_UPDATE: MAX_MEMORY EXPANDED TO ${MAX_HACK_MEMORY}MB`, 'sys');
         }
         for (let i = 0; i < 15; i++) bits.push(new Bit(this.x, this.y)); // 最適化のため低下 (40 -> 15)
     }
@@ -1754,6 +1758,7 @@ function startGame() {
     player.bossTimeElapsed = 0;
     playerPowerLevel = 0;
     currentHackMemory = 0;
+    MAX_HACK_MEMORY = 400;
 
     // システムビット初期化 (セッション毎に800にリセット)
     playerBits = 800;
