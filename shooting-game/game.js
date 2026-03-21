@@ -19,7 +19,7 @@ let playerBits = parseInt(localStorage.getItem('hacker_shooter_bits')) || 0;
 let startTime = 0;
 let gameOver = false;
 let gameActive = false;
-let lastTime = performance.now();
+let lastTime = Date.now();
 let bulletHitRecently = 0;
 let bitMultiplier = 1;
 let screenShake = 0;
@@ -162,7 +162,8 @@ let towerState = {
         initialSlots: 5
     },
     currentTrouble: null, // 'darkness', 'nobits', 'highload'
-    pendingReward: null
+    pendingReward: null,
+    pendingBits: 0
 };
 
 class TowerManager {
@@ -182,15 +183,20 @@ class TowerManager {
         for (let i = 0; i < 3; i++) {
             const diff = difficulties[i];
             const color = colors[Math.floor(Math.random() * colors.length)];
-            // ランダムなブロックを報酬に設定 (タワー専用チップから選択)
             const rewardPool = BLOCKS.filter(b => b.isTowerChip);
             const rewardBlock = rewardPool[Math.floor(Math.random() * rewardPool.length)];
             
+            // 難易度別のビット報酬
+            let rewardBits = 100;
+            if (diff === 'NORMAL') rewardBits = 250;
+            if (diff === 'HARD') rewardBits = 500;
+
             options.push({
                 type: 'battle',
                 difficulty: diff,
                 color: color,
                 rewardBlockId: rewardBlock ? rewardBlock.id : 'main-shot-count',
+                rewardBits: rewardBits,
                 trouble: Math.random() < 0.2 ? ['darkness', 'nobits', 'highload'][Math.floor(Math.random() * 3)] : null
             });
         }
@@ -200,11 +206,12 @@ class TowerManager {
     static startFloor(option) {
         towerState.currentTrouble = option.trouble;
         towerState.pendingReward = option.rewardBlockId;
+        towerState.pendingBits = option.rewardBits || 0;
         gameActive = true;
         isPaused = false;
         hp = towerState.permanentUpgrades.maxHP;
-        score = 0; // フロア内での進捗管理に使用する場合はリセット
-        startTime = performance.now();
+        score = 0;
+        startTime = Date.now();
         
         // トラブルフロア演出
         if (towerState.currentTrouble === 'darkness') {
@@ -218,6 +225,16 @@ class TowerManager {
     static clearFloor() {
         gameActive = false;
         towerState.currentFloor++;
+        towerState.bits = playerBits;
+        towerState.lives = player.lives; // 残数を保存
+        
+        // ビット報酬の付与
+        if (towerState.pendingBits) {
+            playerBits += towerState.pendingBits;
+            addLog(`FLOOR_REWARD: ${towerState.pendingBits} BIT 獲得`, "hack");
+            towerState.pendingBits = 0;
+        }
+
         if (towerState.currentFloor > towerState.maxFloors) {
             gameClear();
         } else {
@@ -889,7 +906,8 @@ function showTowerFloorSelect() {
         card.innerHTML = `
             <div class="floor-diff">${opt.difficulty}</div>
             <div style="font-size:1.2rem; margin:10px 0;">${opt.type.toUpperCase()}</div>
-            <div class="floor-reward">報酬: ${rewardName}</div>
+            <div class="floor-reward">CHIP: ${rewardName}</div>
+            <div class="floor-reward">BITS: +${opt.rewardBits}</div>
             ${opt.trouble ? `<div class="floor-trouble">[TROUBLE: ${opt.trouble.toUpperCase()}]</div>` : ''}
         `;
         card.onclick = () => TowerManager.startFloor(opt);
