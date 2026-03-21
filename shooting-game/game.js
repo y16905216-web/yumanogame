@@ -947,6 +947,10 @@ function showTowerFloorSelect() {
     overlay.classList.remove('hidden');
     document.getElementById('tower-floor-num').textContent = `F${String(towerState.currentFloor).padStart(2, '0')}`;
     
+    // Bits display update
+    const bitsSpan = document.getElementById('tower-floor-bits');
+    if (bitsSpan) bitsSpan.textContent = playerBits;
+
     const container = document.getElementById('floor-options-container');
     container.innerHTML = '';
     
@@ -955,35 +959,41 @@ function showTowerFloorSelect() {
     if (sidebar) {
         sidebar.innerHTML = '';
         for (let i = 1; i <= 30; i++) {
-            const dot = document.createElement('div');
-            dot.className = 'tower-dot';
-            if (i % 10 === 0 || i === 30) dot.classList.add('boss');
-            if (i % 5 === 0 && i % 10 !== 0) dot.classList.add('shop');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'tower-node-wrapper';
+            if (i < towerState.currentFloor) wrapper.classList.add('cleared');
+            if (i === towerState.currentFloor) wrapper.classList.add('active');
             
-            if (i < towerState.currentFloor) dot.classList.add('cleared');
-            if (i === towerState.currentFloor) dot.classList.add('active');
-            dot.setAttribute('data-floor', `F${i.toString().padStart(2, '0')}`);
-            sidebar.appendChild(dot);
+            wrapper.innerHTML = `
+                <div class="tower-dot"></div>
+                <div class="tower-dot-label">F${i.toString().padStart(2, '0')}</div>
+            `;
+            
+            sidebar.appendChild(wrapper);
             if (i === towerState.currentFloor) {
                 setTimeout(() => {
-                    dot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }, 100);
             }
         }
     }
 
-    // Reroll ボタンの設定
+    // Reroll Button Hook
     const rerollBtn = document.getElementById('tower-reroll-btn');
     if (rerollBtn) {
         rerollBtn.onclick = () => {
-            if (playerBits >= 500) {
-                playerBits -= 500;
-                updateUI();
-                saveGameState();
-                addLog("!! SYSTEM_RECALIBRATED: OPTIONS_REFRESHED", "hack");
-                showTowerFloorSelect(); // 再描画
+            if (playerBits >= 100) {
+                playerBits -= 100;
+                addLog("REROLL_EXECUTED: データを再構成しました (-100 BITS)", "hack");
+                showTowerFloorSelect(); // Regenerate options and re-render
             } else {
-                addLog("!! INSUFFICIENT_BITS", "error");
+                addLog("ERROR: INSUFFICIENT_BITS_FOR_REROLL", "error");
+                rerollBtn.style.color = '#ff0000';
+                rerollBtn.style.borderColor = '#ff0000';
+                setTimeout(() => {
+                    rerollBtn.style.color = '#ffaa00';
+                    rerollBtn.style.borderColor = '#ffaa00';
+                }, 300);
             }
         };
     }
@@ -3242,8 +3252,8 @@ function draw() {
     if (isTowerMode && towerState.currentTrouble === 'darkness') {
         ctx.save();
         ctx.beginPath();
-        // 自機周りだけ円形にくり抜く (120 -> 220 に拡大)
-        ctx.arc(player.x, player.y, 220, 0, Math.PI * 2);
+        // 自機周りだけ円形にくり抜く
+        ctx.arc(player.x, player.y, 250, 0, Math.PI * 2); // 120 -> 250 (Wides the view area)
         ctx.clip();
     }
 

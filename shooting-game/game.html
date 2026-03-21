@@ -233,6 +233,7 @@
         <!-- TOWER FLOOR SELECT -->
         <div id="tower-floor-select" class="overlay hidden">
             <h2 style="color:#f0f; text-shadow:0 0 10px #f0f;">FLOOR_SELECT // <span id="tower-floor-num">F01</span></h2>
+            <div style="font-size: 0.8rem; color: #00ff41; margin-bottom: 10px; font-weight: bold;">AVAILABLE BITS: <span id="tower-floor-bits">0</span></div>
             <div class="tower-layout">
                 <div id="floor-options-container">
                     <!-- JSで生成 -->
@@ -241,10 +242,9 @@
                     <!-- JSで生成 -->
                 </div>
             </div>
-            <!-- REROLL BUTTON -->
             <div id="tower-reroll-container" style="margin-top: 20px;">
-                <button id="tower-reroll-btn" class="btn-primary" style="background:#f0f; color:#fff; border-color:#f0f; font-size:0.8rem; padding:8px 15px;">
-                    ♻️ OPTIONS_REROLL (500 BITS)
+                <button id="tower-reroll-btn" style="background: rgba(40, 40, 0, 0.8); border: 2px solid #ffaa00; color: #ffaa00; padding: 10px 20px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 0 10px rgba(255,170,0,0.3);">
+                    [ REROLL OPTIONS (-100 BITS) ]
                 </button>
             </div>
         </div>

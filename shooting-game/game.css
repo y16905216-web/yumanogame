@@ -940,114 +940,94 @@ button:hover::after {
 
 .tower-progress-sidebar {
     display: flex;
-    flex-direction: column-reverse; /* 下から1, 2, 3... */
-    gap: 8px;
-    padding: 15px;
-    background: rgba(0, 40, 60, 0.4);
-    border: 1px solid rgba(0, 255, 255, 0.5);
-    border-radius: 12px;
-    height: 380px; 
+    flex-direction: column-reverse; /* 下から1F */
+    gap: 0;
+    background: rgba(0, 20, 10, 0.6);
+    padding: 20px 10px 20px 30px;
+    border: 1px solid #00ff41;
+    border-radius: 8px;
+    height: 350px;
     overflow-y: auto;
+    box-shadow: inset 0 0 20px rgba(0, 255, 65, 0.1);
+}
+
+.tower-node-wrapper {
+    display: flex;
+    align-items: center;
     position: relative;
-    box-shadow: inset 0 0 20px rgba(0, 255, 255, 0.1);
-    scrollbar-width: thin;
+    height: 30px;
 }
 
-.tower-progress-sidebar::-webkit-scrollbar {
-    width: 4px;
+.tower-node-wrapper::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 15px;
+    width: 2px;
+    height: 30px;
+    background: #333;
+    z-index: 1;
 }
 
-.tower-progress-sidebar::-webkit-scrollbar-thumb {
-    background: #0ff;
-    border-radius: 2px;
+.tower-node-wrapper:first-child::before {
+    display: none;
+}
+
+.tower-node-wrapper.cleared::before,
+.tower-node-wrapper.active::before {
+    background: #00ff41;
+    box-shadow: 0 0 5px #00ff41;
 }
 
 .tower-dot {
-    width: 14px;
-    height: 14px;
-    border: 2px solid #555;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    position: relative;
-    flex-shrink: 0;
-    transition: 0.3s;
     background: #111;
+    border: 2px solid #555;
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.tower-dot::after {
-    content: attr(data-floor);
-    position: absolute;
-    left: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.65rem;
-    color: #888;
-    white-space: nowrap;
+.tower-node-wrapper.cleared .tower-dot {
+    background: #00ff41;
+    border-color: #fff;
+    box-shadow: 0 0 10px #00ff41;
 }
 
-.tower-dot.cleared {
-    background: #0ff;
-    border-color: #0ff;
-    box-shadow: 0 0 10px #0ff;
-}
-
-.tower-dot.cleared::after {
-    color: #0ff;
-}
-
-.tower-dot.active {
+.tower-node-wrapper.active .tower-dot {
     background: #f0f;
-    border-color: #f0f;
-    box-shadow: 0 0 15px #f0f;
-    transform: scale(1.2);
-    animation: pulseActive 1.5s infinite alternate;
+    border-color: #fff;
+    box-shadow: 0 0 15px #f0f, 0 0 30px #f0f;
+    transform: scale(1.5);
+    animation: pulseNode 1.5s infinite;
 }
 
-.tower-dot.active::after {
-    color: #f0f;
-    font-weight: bold;
-    text-shadow: 0 0 5px #f0f;
+@keyframes pulseNode {
+    0% { box-shadow: 0 0 10px #f0f; }
+    50% { box-shadow: 0 0 25px #f0f, 0 0 40px rgba(255, 0, 255, 0.5); }
+    100% { box-shadow: 0 0 10px #f0f; }
 }
 
-.tower-dot.boss {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border-color: #f33;
-    background: rgba(255, 0, 0, 0.2);
-}
-
-.tower-dot.boss.cleared {
-    background: #f33;
-    box-shadow: 0 0 12px #f33;
-}
-
-.tower-dot.shop {
-    border-radius: 2px;
-    border-color: #ff0;
-    background: rgba(255, 255, 0, 0.2);
-}
-
-.tower-dot.shop.cleared {
-    background: #ff0;
-    box-shadow: 0 0 10px #ff0;
-}
-
-@keyframes pulseActive {
-    from { box-shadow: 0 0 5px #f0f; opacity: 0.8; }
-    to { box-shadow: 0 0 20px #f0f; opacity: 1; }
-}
-
-#tower-reroll-btn {
+.tower-dot-label {
+    margin-left: 20px;
+    font-size: 0.7rem;
+    color: #666;
+    font-family: monospace;
     transition: 0.3s;
 }
 
-#tower-reroll-btn:hover {
-    transform: scale(1.05);
-    box-shadow: 0 0 15px rgba(255, 0, 255, 0.6);
+.tower-node-wrapper.cleared .tower-dot-label {
+    color: #00ff41;
 }
 
-#tower-reroll-btn:active {
-    transform: scale(0.95);
+.tower-node-wrapper.active .tower-dot-label {
+    color: #fff;
+    font-weight: bold;
+    font-size: 0.9rem;
+    text-shadow: 0 0 8px #f0f;
+    transform: translateX(5px);
 }
 
 .floor-card {
