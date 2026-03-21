@@ -165,13 +165,18 @@ let towerState = {
     },
     currentTrouble: null, // 'darkness', 'nobits', 'highload'
     pendingReward: null,
-    pendingBits: 0
+    pendingBits: 0,
+    skillCooldown: 0,
+    skillMaxCooldown: 1800
 };
 
 class TowerManager {
     static generateFloors() {
         const types = ['battle', 'battle', 'battle'];
         if (towerState.currentFloor % 5 === 0) {
+            return [{ type: 'shop', difficulty: 'REST', reward: 'RESTORE_SHOP' }];
+        }
+        if (Math.random() < 0.15 && towerState.currentFloor > 1 && towerState.currentFloor !== 30) {
             return [{ type: 'shop', difficulty: 'REST', reward: 'RESTORE_SHOP' }];
         }
         if (towerState.currentFloor === 30) {
@@ -210,6 +215,14 @@ class TowerManager {
         towerState.pendingReward = option.rewardBlockId;
         towerState.pendingBits = option.rewardBits || 0;
         
+        if (option.type === 'shop') {
+            gameActive = false;
+            towerState.currentTrouble = null;
+            closeOverlays();
+            showTowerShopScreen();
+            return;
+        }
+
         // ゲーム状態の初期化
         gameActive = true;
         isPaused = false;
@@ -1063,6 +1076,79 @@ function showTowerAssembleScreen() {
     addLog(`FLOOR_${towerState.currentFloor-1}_CLEAR: システムをアップグレードしました`, "hack");
 }
 
+function showTowerShopScreen() {
+    closeOverlays();
+    const overlay = document.getElementById('tower-shop-screen');
+    overlay.classList.remove('hidden');
+    document.getElementById('shop-bits').textContent = playerBits;
+    
+    const container = document.getElementById('shop-items-container');
+    container.innerHTML = '';
+    
+    const skills = [
+        { id: 'debugger_shield', name: 'デバッガー・シールド', desc: '5秒間、敵弾を無効化するバリアを展開', price: 300 },
+        { id: 'overclock', name: 'オーバークロック', desc: '一時的に連射狂化されるが、後で速度低下', price: 400 },
+        { id: 'logic_chain', name: 'ロジック・チェーン', desc: '敵撃破時に周囲の敵へ連爆ダメージ伝播', price: 500 },
+        { id: 'rewrite_code', name: 'リライト・コード', desc: '周囲の敵をハッキングし同士討ちさせる', price: 600 },
+        { id: 'code_burst', name: 'コード・バースト', desc: '全敵を静止し、解除時に蓄積ダメージを与える', price: 800 }
+    ];
+    
+    // Pick 2 random skills to sell
+    const shuffledSkills = skills.sort(() => 0.5 - Math.random());
+    const shopOptions = [
+        { type: 'heal', name: 'システム修復', desc: 'HPを最大まで回復する', price: 200 },
+        shuffledSkills[0],
+        shuffledSkills[1]
+    ];
+    
+    shopOptions.forEach(opt => {
+        const card = document.createElement('div');
+        card.style.background = 'rgba(0, 30, 0, 0.8)';
+        card.style.border = '1px solid #00ff41';
+        card.style.padding = '15px';
+        card.style.width = '200px';
+        card.style.textAlign = 'center';
+        card.style.borderRadius = '4px';
+        
+        card.innerHTML = `
+            <div style="color: #fff; font-weight: bold; margin-bottom: 5px;">${opt.name}</div>
+            <div style="color: #aaa; font-size: 0.7rem; margin-bottom: 10px; min-height: 40px;">${opt.desc}</div>
+            <div style="color: #0ff; margin-bottom: 10px; font-family: monospace; font-weight: bold;">${opt.price} BITS</div>
+            <button class="buy-btn" style="background: #00ff41; color: #000; padding: 8px 10px; font-weight: bold; width: 100%; border: none; cursor: pointer; border-radius: 4px;">購入 [ BUY ]</button>
+        `;
+        
+        const btn = card.querySelector('.buy-btn');
+        btn.onclick = () => {
+            if (playerBits >= opt.price) {
+                playerBits -= opt.price;
+                document.getElementById('shop-bits').textContent = playerBits;
+                addLog(`SHOP: ${opt.name} を購入しました`, "hack");
+                btn.textContent = "購入済み [ BOUGHT ]";
+                btn.style.background = "#555";
+                btn.style.color = "#aaa";
+                btn.disabled = true;
+                
+                if (opt.type === 'heal') {
+                    hp = towerState.permanentUpgrades.maxHP;
+                    addLog("HUD: 機体完全性が回復しました", "hack");
+                } else {
+                    player.currentTowerSkill = opt.id;
+                    player.currentTowerSkillName = opt.name;
+                    addLog(`SKILL_UPDATED: [${opt.name}]`, "hack");
+                }
+            } else {
+                addLog("ERROR: BITS不足です", "error");
+            }
+        };
+        container.appendChild(card);
+    });
+    
+    document.getElementById('shop-leave-btn').onclick = () => {
+        addLog("SHOP: 通信を切断します...", "hack");
+        TowerManager.clearFloor();
+    };
+}
+
 function showTowerMetaHack() {
     closeOverlays();
     const modal = document.getElementById('tower-meta-hack');
@@ -1405,6 +1491,13 @@ function applyStaticStats() {
     player.chargeLevel = 0;
     player.lastSkillTime = 0;
     player.bossTimeElapsed = 0;
+    
+    // Tower Skills Flags
+    player.hasDebuggerShield = false;
+    player.isOverclocked = false;
+    player.isCoolingDown = false;
+    player.hasLogicChainActive = false;
+    
     player.hasEndurance = false;
     player.autoFire = false;
     player.subShips = 0;
@@ -1480,6 +1573,8 @@ function applyStaticStats() {
 }
 
 function applyDynamicLogic(target = null) {
+    if (player.isOverclocked) player.fireRate *= 0.3; // 連射狂化
+    if (player.isCoolingDown) player.speed *= 0.3;    // 移動速度激減
     // 毎フレーム判定が必要なロジックブロックのみ評価
     player.activeModules.forEach(mod => {
         if (mod.id === 'logic-if' || mod.id === 'logic-while') {
@@ -1833,6 +1928,24 @@ function updateUI() {
     } else if (bossHud) {
         bossHud.classList.add('hidden');
     }
+
+    // Tower Skill HUD
+    const skillHud = document.getElementById('tower-skill-hud');
+    if (isTowerMode) {
+        if (skillHud) skillHud.classList.remove('hidden');
+        const skillName = document.getElementById('tower-skill-name');
+        if (skillName) skillName.textContent = player.currentTowerSkillName || 'NO SKILL';
+        
+        const cooldownBar = document.getElementById('tower-skill-cooldown-bar');
+        if (cooldownBar && player.currentTowerSkill) {
+            const pct = Math.max(0, 100 - (towerState.skillCooldown / towerState.skillMaxCooldown) * 100);
+            cooldownBar.style.width = `${pct}%`;
+            cooldownBar.style.background = pct >= 100 ? '#00ff41' : '#f00';
+            skillName.style.color = pct >= 100 ? '#fff' : '#888';
+        }
+    } else {
+        if (skillHud) skillHud.classList.add('hidden');
+    }
 }
 
 function formatTime(s) {
@@ -1890,7 +2003,7 @@ class Enemy {
         if (bossesDefeated >= 1) {
             baseHp = Math.max(3, baseHp); // 1体目のボス撃破後は最低でも弾3発分の体力に
         }
-        this.speed = 2 + Math.random() * 2;
+        this.speed = (2 + Math.random() * 2) * 0.5; // (全モード共通) 速度を半分に
         this.color = '#0ff';
         this.type = 'normal';
         this.w = 30;
@@ -2417,6 +2530,10 @@ function update() {
     }
     if (player.barrierTimer > 0) player.barrierTimer--;
     if (bulletHitRecently > 0) bulletHitRecently--; // タイマーのデクリメント追加
+    
+    if (towerState.skillCooldown > 0) {
+        towerState.skillCooldown--;
+    }
 
     // 決死の覚悟 [passive-blood-pact] (自傷ダメージ)
     if (player.isBloodPact && gameActive && !gameOver) {
@@ -2461,10 +2578,19 @@ function update() {
         player.lastFireTime = now; // Prevent firing
     }
 
-    // Sキー: ハッキング (タワーモードでは戦闘中不可)
-    if ((keys['s'] || keys['S']) && !isTowerMode) {
-        if (hackGauge >= 100 && !isHacking) {
-            openHackingScreen();
+    // Sキー: ハッキング (通常モード) または スキル発動 (タワーモード)
+    if (keys['s'] || keys['S']) {
+        if (!isTowerMode) {
+            if (hackGauge >= 100 && !isHacking) {
+                openHackingScreen();
+            }
+        } else {
+            // タワーモードのスキル発動
+            if (player.currentTowerSkill && towerState.skillCooldown <= 0 && gameActive && !gameOver) {
+                activateTowerSkill(player.currentTowerSkill);
+                towerState.skillCooldown = towerState.skillMaxCooldown; // 発動後にクールダウン突入
+                keys['s'] = false; keys['S'] = false; // 連続発動防止
+            }
         }
     }
 
@@ -2752,6 +2878,61 @@ function fireBullets(now, chargeScale = 0) {
     }
 }
 
+function activateTowerSkill(skillId) {
+    if (!gameActive) return;
+    
+    switch (skillId) {
+        case 'debugger_shield':
+            player.hasDebuggerShield = true;
+            addLog("SKILL: デバッガー・シールド展開", "hack");
+            setTimeout(() => { player.hasDebuggerShield = false; addLog("SHIELD_OFF", "hack"); }, 5000);
+            break;
+        case 'overclock':
+            player.isOverclocked = true;
+            addLog("SKILL: オーバークロック開始", "hack");
+            setTimeout(() => { 
+                player.isOverclocked = false; 
+                player.isCoolingDown = true;
+                addLog("OVERCLOCK_END: 冷却状態", "error");
+                setTimeout(() => {
+                    player.isCoolingDown = false;
+                    addLog("COOLING_COMPLETE", "hack");
+                }, 3000);
+            }, 5000);
+            break;
+        case 'logic_chain':
+            player.hasLogicChainActive = true;
+            addLog("SKILL: ロジック・チェーン起動", "hack");
+            setTimeout(() => { player.hasLogicChainActive = false; addLog("LOGIC_CHAIN_OFF", "hack"); }, 8000);
+            break;
+        case 'rewrite_code':
+            addLog("SKILL: リライト・コード送信", "hack");
+            // 半径300以内の敵をハック
+            enemies.forEach(e => {
+                if (Math.hypot(e.x - player.x, e.y - player.y) < 300 && !e.isBoss) {
+                    e.isHacked = true;
+                }
+            });
+            break;
+        case 'code_burst':
+            player.isTimeStopped = true; // 既存の時間を止めるフラグを流用
+            addLog("SKILL: コード・バースト (無限ループ)", "hack");
+            setTimeout(() => {
+                player.isTimeStopped = false;
+                addLog("LOOP_END: ダメージ清算", "hack");
+                // 凍結中のダメージをバースト
+                enemies.forEach(e => {
+                    if (e.frozenDamage && e.frozenDamage > 0) {
+                        e.hp -= e.frozenDamage;
+                        createExplosion(e.x, e.y, '#f00', Math.min(50, e.frozenDamage));
+                        e.frozenDamage = 0;
+                    }
+                });
+            }, 3000);
+            break;
+    }
+}
+
 function updateProjectiles(now) {
     // Phase 2: Synchro Link (同期)
     const synchroActive = player.hasSynchro && bullets.length >= 5;
@@ -2980,7 +3161,12 @@ function updateProjectiles(now) {
                 // ダメージ適用 (Blood Pact・Drillの係数 + デコイシナジー + 残響 + タワーボス補正)
                 let damage = (b.damage || 1) * (player.decoyDamageBoost || 1) * (e.vulnerableTimer > 0 ? 1.5 : 1.0);
                 if (e.isBoss && b.towerBossDamageMult) damage *= b.towerBossDamageMult;
-                e.hp -= damage;
+                
+                if (player.isTimeStopped) {
+                    e.frozenDamage = (e.frozenDamage || 0) + damage;
+                } else {
+                    e.hp -= damage;
+                }
 
                 // 生命吸収 [towerLifeSteal]
                 if (player.towerLifeSteal) {
@@ -3127,10 +3313,20 @@ function updateEnemies() {
         });
 
         if (e.hp <= 0) {
-            e.die();
+            if (typeof e.die === 'function') Object; 
             if (player.corpseExplosion) {
                 createExplosion(e.x, e.y, '#f00', 5);
                 for (let e2 of enemies) { if (Math.hypot(e2.x - e.x, e2.y - e.y) < 80) e2.hp -= 1; }
+            }
+            if (player.hasLogicChainActive) {
+                createExplosion(e.x, e.y, '#0ff', 15);
+                for (let e2 of enemies) {
+                    if (e2 !== e && Math.hypot(e2.x - e.x, e2.y - e.y) < 180) {
+                        e2.hp -= 30; // 誘爆ダメージ
+                        // 接続線エフェクト
+                        lightningStrikes.push({ x1: e.x, y1: e.y, x2: e2.x, y2: e2.y, life: 10, color: '#0ff' });
+                    }
+                }
             }
             hackGauge = Math.min(100, hackGauge + 10);
             return false;
@@ -3178,6 +3374,11 @@ function updateParticles() {
 }
 
 function takeDamage(amount, type = null) {
+    if (player.hasDebuggerShield) {
+        if (Math.random() < 0.2) addLog("SHIELD_BLOCK: 攻撃を無効化", "info");
+        createExplosion(player.x, player.y, '#0af', 15);
+        return;
+    }
     if (player.isInvincible || player.barrierTimer > 0) {
         if (type === 'enemy') contactFlags.enemy = true;
         if (type === 'bullet') contactFlags.bullet = true;
@@ -3245,8 +3446,20 @@ function draw() {
     ctx.save();
     // モーションブラーのための半透明黒クリア
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(0, 5, 0, 0.3)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Code Burst 演出
+    if (player.isTimeStopped) {
+        ctx.fillStyle = 'rgba(0, 5, 0, 0.8)'; // 暗め
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0f0';
+        ctx.font = '10px monospace';
+        for (let i = 0; i < 15; i++) {
+            ctx.fillText(String.fromCharCode(0x30A0 + Math.random() * 96), Math.random() * canvas.width, Math.random() * canvas.height);
+        }
+    } else {
+        ctx.fillStyle = 'rgba(0, 5, 0, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     // 暗闇演出
     if (isTowerMode && towerState.currentTrouble === 'darkness') {
