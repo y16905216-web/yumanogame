@@ -1720,7 +1720,12 @@ class Boss extends Enemy {
     die() {
         createExplosion(this.x, this.y, '#f0f', 50);
         bossesDefeated++;
-        MAX_HACK_MEMORY += 50; // ボス討伐でメモリ拡張
+
+        let memIncrease = 50;
+        if (bossesDefeated === 2) {
+            memIncrease = 150; // 2体目ボス撃破時は大幅ボーナス
+        }
+        MAX_HACK_MEMORY += memIncrease;
         updateUI();
 
         if (bossesDefeated >= 3) {
@@ -1880,10 +1885,7 @@ function update() {
     lastTime = now;
     updateUI(); // スコア更新後にUI反映
 
-    if (score >= CLEAR_TIME) {
-        gameClear();
-        return;
-    }
+    // 自動での早期クリア判定を削除 (ボス3体目撃破でクリアになる)
 
     // 状態評価とキャッシュ更新
     updateConditionCache();
