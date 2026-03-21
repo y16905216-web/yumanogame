@@ -209,16 +209,34 @@ class TowerManager {
         towerState.currentTrouble = option.trouble;
         towerState.pendingReward = option.rewardBlockId;
         towerState.pendingBits = option.rewardBits || 0;
+        
+        // ゲーム状態の初期化
         gameActive = true;
         isPaused = false;
+        gameOver = false;
         hp = towerState.permanentUpgrades.maxHP;
         score = 0;
         startTime = Date.now();
+        lastTime = Date.now();
+        
+        // オブジェクトのクリア
+        enemies = []; bullets = []; enemyBullets = []; bits = []; particles = []; vortices = [];
+        turrets = []; decoys = []; portals = []; lightningStrikes = [];
         
         // モジュールとステータスの同期
         player.activeModules = JSON.parse(JSON.stringify(hackingStack));
         applyStaticStats();
         applyDynamicLogic();
+        
+        // UI遷移
+        document.getElementById('home-screen').classList.add('hidden');
+        document.getElementById('tower-floor-select').classList.add('hidden');
+        document.getElementById('overlay').classList.add('hidden');
+        document.getElementById('side-hud').classList.remove('hidden');
+        document.getElementById('controls-guide').classList.remove('hidden');
+        document.getElementById('clear-screen').classList.add('hidden');
+        
+        updateUI();
         
         // トラブルフロア演出
         if (towerState.currentTrouble === 'darkness') {
@@ -226,7 +244,6 @@ class TowerManager {
         }
         
         closeOverlays();
-        closeHackingScreen();
     }
 
     static clearFloor() {
@@ -430,7 +447,44 @@ const BLOCKS = [
     { id: 'effect-malware', category: CATEGORIES.SKILL, label: '[ 浸食 ]', desc: '敵にノイズを蓄積させ、一定量で敵の攻撃を自爆に変える', icon: '🦠' },
     { id: 'effect-repel', category: CATEGORIES.SKILL, label: '[ 反発 ]', desc: '自分の弾が敵の弾を弾き飛ばす', icon: '🧲', maxUsage: 2 },
     { id: 'system-reboot', category: CATEGORIES.SYSTEM, label: '[ 再起動 ]', desc: '敵撃破で1秒無敵になるが、その間攻撃不能', icon: '♻️', maxUsage: 1 },
-    { id: 'system-random', category: CATEGORIES.SYSTEM, label: '[ 乱数 ]', desc: '弾の威力・速度・サイズがランダムに変動する', icon: '🎲', maxUsage: 1 }
+    { id: 'system-random', category: CATEGORIES.SYSTEM, label: '[ 乱数 ]', desc: '弾の威力・速度・サイズがランダムに変動する', icon: '🎲', maxUsage: 1 },
+
+    // --- 【赤：破壊系統】（攻撃力・殲滅力） ---
+    { id: 'chip-red-dmg', category: CATEGORIES.MAIN, label: '[ 威力アップ ]', desc: '基礎ダメージが増加。', isTowerChip: true, color: '#ff4444', icon: '🔺' },
+    { id: 'chip-red-range', category: CATEGORIES.SKILL, label: '[ 爆発範囲 ]', desc: '着弾時の爆風が拡大。', isTowerChip: true, color: '#ff4444', icon: '💥' },
+    { id: 'chip-red-rate', category: CATEGORIES.MAIN, label: '[ 連射速度 ]', desc: '発射間隔を短縮。', isTowerChip: true, color: '#ff4444', icon: '⚡' },
+    { id: 'chip-red-crit', category: CATEGORIES.MAIN, label: '[ 会心の一撃 ]', desc: '確率でダメージが3倍。', isTowerChip: true, color: '#ff4444', icon: '🎯' },
+    { id: 'chip-red-boss', category: CATEGORIES.MAIN, label: '[ 対ボス火力 ]', desc: 'ボスへのダメージが大幅アップ。', isTowerChip: true, color: '#ff4444', icon: '👹' },
+    { id: 'chip-red-frag', category: CATEGORIES.SKILL, label: '[ 破片飛散 ]', desc: '敵に当たると破片が散る。', isTowerChip: true, color: '#ff4444', icon: '✨' },
+    { id: 'chip-red-burn', category: CATEGORIES.SKILL, label: '[ 残火発生 ]', desc: '着弾地点にダメージ床。', isTowerChip: true, color: '#ff4444', icon: '🔥' },
+
+    // --- 【青：機動力・弾幕】（攻撃範囲・特殊弾） ---
+    { id: 'chip-blue-homing', category: CATEGORIES.MAIN, label: '[ 追尾機能 ]', desc: '弾が敵を自動追尾。', isTowerChip: true, color: '#4444ff', icon: '🛰️' },
+    { id: 'chip-blue-pierce', category: CATEGORIES.MAIN, label: '[ 貫通弾 ]', desc: '敵を突き抜ける。', isTowerChip: true, color: '#4444ff', icon: '🏹' },
+    { id: 'chip-blue-bounce', category: CATEGORIES.MAIN, label: '[ 跳弾性能 ]', desc: '画面端で跳ね返る。', isTowerChip: true, color: '#4444ff', icon: '🏀' },
+    { id: 'chip-blue-drill', category: CATEGORIES.MAIN, label: '[ ドリル化 ]', desc: '敵を多段ヒットで削る。', isTowerChip: true, color: '#4444ff', icon: '🔩' },
+    { id: 'chip-blue-all', category: CATEGORIES.MAIN, label: '[ 全方位弾 ]', desc: '前後左右に弾を放つ。', isTowerChip: true, color: '#4444ff', icon: '💠' },
+    { id: 'chip-blue-wave', category: CATEGORIES.MAIN, label: '[ 波状攻撃 ]', desc: '弾がうねりながら飛ぶ。', isTowerChip: true, color: '#4444ff', icon: '〰️' },
+    { id: 'chip-blue-accel', category: CATEGORIES.MAIN, label: '[ 時間差加速 ]', desc: '途中で急加速する。', isTowerChip: true, color: '#4444ff', icon: '⏩' },
+    { id: 'chip-blue-split', category: CATEGORIES.MAIN, label: '[ 多段分裂 ]', desc: '着弾時に弾が分かれる。', isTowerChip: true, color: '#4444ff', icon: '🌵' },
+
+    // --- 【緑：防衛・生存】（防御・回復・無敵） ---
+    { id: 'chip-green-hp', category: CATEGORIES.PASSIVE, label: '[ 最大HP上昇 ]', desc: 'HPの最大値をアップ。', isTowerChip: true, color: '#44ff44', icon: '💗' },
+    { id: 'chip-green-heal', category: CATEGORIES.PASSIVE, label: '[ 自動修復 ]', desc: '秒間HPを小回復。', isTowerChip: true, color: '#44ff44', icon: '🛠️' },
+    { id: 'chip-green-shield', category: CATEGORIES.SKILL, label: '[ 緊急バリア ]', desc: 'ダメージを無効。', isTowerChip: true, color: '#44ff44', icon: '🛡️' },
+    { id: 'chip-green-revive', category: CATEGORIES.PASSIVE, label: '[ 再起動回数 ]', desc: '復活回数を増やす。', isTowerChip: true, color: '#44ff44', icon: '♻️' },
+    { id: 'chip-green-parry', category: CATEGORIES.PASSIVE, label: '[ ガード率 ]', desc: '確率で被弾を無効化。', isTowerChip: true, color: '#44ff44', icon: '⚔️' },
+    { id: 'chip-green-absorb', category: CATEGORIES.SKILL, label: '[ 生命吸収 ]', desc: '与撃時にHPを回復。', isTowerChip: true, color: '#44ff44', icon: '💉' },
+    { id: 'chip-green-invinc', category: CATEGORIES.PASSIVE, label: '[ 無敵延長 ]', desc: '被弾後無敵時間を延長。', isTowerChip: true, color: '#44ff44', icon: '👻' },
+
+    // --- 【黄：ハック・資源】（報酬・特殊効果） ---
+    { id: 'chip-yellow-bit', category: CATEGORIES.SYSTEM, label: '[ ビット増量 ]', desc: '敵撃破時のビットを増量。', isTowerChip: true, color: '#ffff44', icon: '💰' },
+    { id: 'chip-yellow-magnet', category: CATEGORIES.PASSIVE, label: '[ 回収磁石 ]', desc: 'ビットの吸い込み範囲拡大。', isTowerChip: true, color: '#ffff44', icon: '🧲' },
+    { id: 'chip-yellow-shop', category: CATEGORIES.SYSTEM, label: '[ ショップ割引 ]', desc: '休憩所の価格を下げる。', isTowerChip: true, color: '#ffff44', icon: '🏷️' },
+    { id: 'chip-yellow-recycle', category: CATEGORIES.SYSTEM, label: '[ リサイクル ]', desc: '確率でビットを消費しない。', isTowerChip: true, color: '#ffff44', icon: '♻️' },
+    { id: 'chip-yellow-exp', category: CATEGORIES.SYSTEM, label: '[ 経験値ブースト ]', desc: 'レベルの上がりを早くする。', isTowerChip: true, color: '#ffff44', icon: '💎' },
+    { id: 'chip-yellow-luck', category: CATEGORIES.SYSTEM, label: '[ 幸運の手 ]', desc: 'レアチップ出現率を上げる。', isTowerChip: true, color: '#ffff44', icon: '🍀' },
+    { id: 'chip-yellow-time', category: CATEGORIES.SKILL, label: '[ 時間遅延 ]', desc: '敵の動きを遅くする。', isTowerChip: true, color: '#ffff44', icon: '⏬' }
 ];
 
 // Phase 3: Initialize usage counts and memory costs
@@ -1374,46 +1428,41 @@ function applyActionEffect(actionId, p, target = null, level = 1) {
     switch (actionId) {
         // --- TOWER MODE CHIPS (30 SELECTION) ---
         // 【赤：破壊系統】
-        case 'chip-red-dmg': player.towerDamageMult = (player.towerDamageMult || 1.0) * (1 + 0.5 * level); break;
-        case 'chip-red-exp': player.towerExplosionSize = (player.towerExplosionSize || 1.0) * (1 + 0.4 * level); obj.isExplosion = true; break;
-        case 'chip-red-fire': player.fireRate = Math.max(30, 180 / (1 + 0.3 * level)); break;
-        case 'chip-red-size': player.bulletSizeMult *= (1 + 0.5 * level); break;
-        case 'chip-red-crit': player.towerCritChance = (player.towerCritChance || 0) + (10 * level); break;
+        case 'chip-red-dmg': player.towerDamageMult = (player.towerDamageMult || 1.0) * (1 + 0.4 * level); break;
+        case 'chip-red-range': player.towerExplosionSize = (player.towerExplosionSize || 1.0) * (1 + 0.3 * level); obj.isExplosion = true; break;
+        case 'chip-red-rate': player.fireRate = Math.max(20, 180 / (1 + 0.25 * level)); break;
+        case 'chip-red-crit': player.towerCritChance = (player.towerCritChance || 0) + (15 * level); break;
+        case 'chip-red-boss': player.towerBossDamageMult = (player.towerBossDamageMult || 1.0) + (1.0 * level); break;
+        case 'chip-red-frag': player.hasFrag = true; player.fragLevel = level; break;
+        case 'chip-red-burn': player.hasBurn = true; player.burnLevel = level; break;
 
-        // 【青：手数・誘導系統】
-        case 'chip-blue-shot': player.multiShot = Math.min(36, player.multiShot + (2 * level)); break;
-        case 'chip-blue-homing': obj.isHoming = true; player.towerHomingStrength = (player.towerHomingStrength || 1) + level; break;
+        // 【青：機動力・弾幕】
+        case 'chip-blue-homing': obj.isHoming = true; player.towerHomingStrength = (player.towerHomingStrength || 1) + (2 * level); break;
+        case 'chip-blue-pierce': obj.isPiercing = true; player.towerPierceCount = (player.towerPierceCount || 1) + level; break;
+        case 'chip-blue-bounce': obj.isBouncing = true; player.towerBounceCount = (player.towerBounceCount || 0) + (2 * level); break;
+        case 'chip-blue-drill': obj.isDrill = true; player.towerDrillInterval = Math.max(2, 10 - level); break;
+        case 'chip-blue-all': player.multiShot = Math.min(36, player.multiShot + (4 * level)); break;
+        case 'chip-blue-wave': obj.isWave = true; break;
+        case 'chip-blue-accel': obj.isStepAccel = true; break;
         case 'chip-blue-split': obj.isSplitting = true; player.towerSplitCount = (player.towerSplitCount || 2) + level; break;
-        case 'chip-blue-bounce': obj.isBouncing = true; player.towerBounceCount = (player.towerBounceCount || 1) + (2 * level); break;
-        case 'chip-blue-speed': player.bulletSpeedMult *= (1 + 0.2 * level); break;
 
-        // 【黄：軌道・多段系統】
-        case 'chip-yellow-pierce': obj.isPiercing = true; player.towerPierceCount = (player.towerPierceCount || 1) + level; break;
-        case 'chip-yellow-drill': obj.isDrill = true; player.towerDrillInterval = Math.max(2, 10 - level); break;
-        case 'chip-yellow-range': player.towerRangeMult = (player.towerRangeMult || 1.0) + (0.5 * level); break;
-        case 'chip-yellow-knock': player.towerKnockback = (player.towerKnockback || 0) + (5 * level); break;
-        case 'chip-yellow-follow': player.towerHasFollowup = true; player.towerFollowupLevel = level; break;
+        // 【緑：防衛・生存】
+        case 'chip-green-hp': const oldMax = MAX_HP; player.towerMaxHP = (player.towerMaxHP || 100) + (50 * level); if (hp === oldMax) hp = player.towerMaxHP; break;
+        case 'chip-green-heal': player.autoHeal += (0.02 * level); break;
+        case 'chip-green-shield': player.barrierTimer = Math.max(player.barrierTimer || 0, 180 * level); break;
+        case 'chip-green-revive': player.lives = (player.lives || 0) + level; break;
+        case 'chip-green-parry': player.towerAutoGuardChance = (player.towerAutoGuardChance || 0) + (10 * level); break;
+        case 'chip-green-absorb': player.towerLifeSteal = (player.towerLifeSteal || 0) + (0.05 * level); break;
+        case 'chip-green-invinc': player.towerInvincMult = (player.towerInvincMult || 1.0) + (0.5 * level); break;
 
-        // 【緑：リソース・ハック系統】
-        case 'chip-green-bit': player.towerBitGainMult = (player.towerBitGainMult || 1.0) + (0.5 * level); break;
-        case 'chip-green-magnet': player.isMagnet = true; player.towerMagnetRange = (player.towerMagnetRange || 200) + (100 * level); break;
-        case 'chip-green-drop': player.towerDropRateMult = (player.towerDropRateMult || 1.0) + (0.2 * level); break;
-        case 'chip-green-cost': /* メモリ計算側で処理済み */ break;
-        case 'chip-green-recycle': player.towerRecycleChance = (player.towerRecycleChance || 0) + (10 * level); break;
-
-        // 【紫：妨害・状態異常系統】
-        case 'chip-purple-lightning': player.isLightning = true; player.towerLightningChain = (player.towerLightningChain || 3) + level; break;
-        case 'chip-purple-stun': player.towerStunDuration = (player.towerStunDuration || 0) + (30 * level); break;
-        case 'chip-purple-attract': player.hasBlackHole = true; player.towerVortexStrength = (player.towerVortexStrength || 1.0) + (0.5 * level); break;
-        case 'chip-purple-defdown': player.towerDefDownLevel = level; break;
-        case 'chip-purple-poison': player.isPoison = true; player.towerPoisonMult = (player.towerPoisonMult || 1.0) + (0.5 * level); break;
-
-        // 【白：機体・生存系統】
-        case 'chip-white-speed': player.speed = PLAYER_SPEED * (1 + 0.1 * level); break;
-        case 'chip-white-invinc': player.towerInvincMult = (player.towerInvincMult || 1.0) + (0.5 * level); break;
-        case 'chip-white-guard': player.towerAutoGuardChance = (player.towerAutoGuardChance || 0) + (5 * level); break;
-        case 'chip-white-regen': player.autoHeal += (0.01 * level); break;
-        case 'chip-white-hitbox': player.hitboxSizeMult *= Math.pow(0.8, level); break;
+        // 【黄：ハック・資源】
+        case 'chip-yellow-bit': player.towerBitGainMult = (player.towerBitGainMult || 1.0) + (1.0 * level); break;
+        case 'chip-yellow-magnet': player.isMagnet = true; player.towerMagnetRange = (player.towerMagnetRange || 100) + (150 * level); break;
+        case 'chip-yellow-shop': player.towerShopDiscount = (player.towerShopDiscount || 0) + (0.1 * level); break;
+        case 'chip-yellow-recycle': player.towerRecycleChance = (player.towerRecycleChance || 0) + (20 * level); break;
+        case 'chip-yellow-exp': player.expBonus *= (1 + 0.5 * level); break;
+        case 'chip-yellow-luck': player.towerLuck = (player.towerLuck || 0) + level; break;
+        case 'chip-yellow-time': player.isSlowMotion = true; player.slowTimer = 300; break;
 
         // --- ORIGINAL BLOCKS ---
         case 'main-shot-count': player.multiShot = Math.min(5, player.multiShot + (p || 1)); break;
@@ -1654,7 +1703,9 @@ class Bit {
             if (isTowerMode && towerState.currentTrouble === 'nobits') {
                 addLog("!! ERROR: BIT_STORAGE_OFFLINE", "error");
             } else {
-                playerBits += 1;
+                let gain = 1;
+                if (isTowerMode && player.towerBitGainMult) gain *= player.towerBitGainMult;
+                playerBits += Math.floor(gain);
                 contactFlags.bit = true;
                 updateUI();
             }
@@ -2113,7 +2164,7 @@ class Boss extends Enemy {
         MAX_HACK_MEMORY += memIncrease;
         updateUI();
 
-        if (this.name === 'MASTER_CORE' || bossesDefeated >= 3) {
+        if (this.name === 'MASTER_CORE' || (isTowerMode ? bossesDefeated >= 1 : bossesDefeated >= 3)) {
             gameClear();
         } else {
             addLog(`BOSS_DESTROYED: [${this.name}]`, 'hack');
@@ -2592,6 +2643,11 @@ function fireBullets(now, chargeScale = 0) {
             poisonMult: player.towerPoisonMult || 1.0,
 
             damage: damageMult,
+            towerBossDamageMult: player.towerBossDamageMult || 1.0,
+            hasFrag: player.hasFrag,
+            fragLevel: player.fragLevel,
+            hasBurn: player.hasBurn,
+            burnLevel: player.burnLevel,
             originX: player.x, originY: player.y,
             hitEnemies: new Map(),
 
@@ -2853,9 +2909,15 @@ function updateProjectiles(now) {
                 if (b.poisonMult > 1.0) { e.poisonTimer = 300; e.poisonDamageMult = b.poisonMult; }
                 if (b.defDown) { e.vulnerableTimer = 180; e.defDownMult = (e.defDownMult || 1.0) * (1 + b.defDown); }
 
-                // ダメージ適用 (Blood Pact・Drillの係数 + デコイシナジー + 残響)
-                const damage = (b.damage || 1) * (player.decoyDamageBoost || 1) * (e.vulnerableTimer > 0 ? 1.5 : 1.0);
+                // ダメージ適用 (Blood Pact・Drillの係数 + デコイシナジー + 残響 + タワーボス補正)
+                let damage = (b.damage || 1) * (player.decoyDamageBoost || 1) * (e.vulnerableTimer > 0 ? 1.5 : 1.0);
+                if (e.isBoss && b.towerBossDamageMult) damage *= b.towerBossDamageMult;
                 e.hp -= damage;
+
+                // 生命吸収 [towerLifeSteal]
+                if (player.towerLifeSteal) {
+                    hp = Math.min(player.towerMaxHP || MAX_HP, hp + damage * player.towerLifeSteal);
+                }
 
                 // Malware Stack (浸食)
                 if (player.hasMalware) {
@@ -2907,6 +2969,22 @@ function updateProjectiles(now) {
                         if (!b.isDrill) return false;
                     }
                 } else if (!b.isLaser && !b.isDrill) {
+                    // 破片飛散 [hasFrag]
+                    if (b.hasFrag) {
+                        for (let j = 0; j < 3 + b.fragLevel; j++) {
+                            const fAngle = Math.random() * Math.PI * 2;
+                            bullets.push({
+                                x: b.x, y: b.y, vx: Math.cos(fAngle) * 5, vy: Math.sin(fAngle) * 5,
+                                color: '#ff0', size: 0.5, life: 30, damage: b.damage * 0.3
+                            });
+                        }
+                    }
+                    // 残火発生 [hasBurn]
+                    if (b.hasBurn) {
+                        particles.push({
+                            x: b.x, y: b.y, vx: 0, vy: 0, life: 120, type: 'burn_floor', level: b.burnLevel
+                        });
+                    }
                     return false;
                 }
             }
@@ -3013,6 +3091,15 @@ function updateParticles() {
             enemies.forEach(e => {
                 if (Math.hypot(e.x - p.x, e.y - p.y) < p.radius) {
                     e.vulnerableTimer = 180; // 3s
+                }
+            });
+            return p.life > 0;
+        }
+        if (p.type === 'burn_floor') {
+            p.life--;
+            enemies.forEach(e => {
+                if (Math.hypot(e.x - p.x, e.y - p.y) < 40) {
+                    e.hp -= 0.1 * (p.level || 1);
                 }
             });
             return p.life > 0;
@@ -3275,6 +3362,11 @@ function draw() {
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
             ctx.stroke();
+        } else if (p.type === 'burn_floor') {
+            ctx.fillStyle = `rgba(255, ${Math.random() * 100}, 0, ${p.life / 120})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 40, 0, Math.PI * 2);
+            ctx.fill();
         } else {
             ctx.fillStyle = p.color;
             ctx.globalAlpha = p.life / 30;
