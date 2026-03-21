@@ -1993,28 +1993,15 @@ function update() {
 }
 
 function fireBullets(now, chargeScale = 0) {
-    if (playerBits <= 0) return; // ビット切れで射撃不可
-
     let bulletSpeed = 10 * player.bulletSpeedMult;
     let bulletSize = 1 * player.bulletSizeMult;
     let damageMult = (player.isBloodPact ? (player.bloodPactDamage || 4.0) : 1.0);
 
-    // 基本ビットコスト (multiShot * 消費倍率)
-    const bitCostPerShot = Math.ceil(player.multiShot * (player.bitCostMult || 1.0));
-    let count = playerBits >= bitCostPerShot ? player.multiShot : 0;
-
-    // ビット消費
-    if (count > 0) {
-        playerBits -= bitCostPerShot;
-        updateUI();
-    } else {
-        return; // ビット不足
-    }
-
+    let count = player.multiShot;
+    updateUI(); // 表示状態を更新
 
     // Binary Trade (等価交換)
     if (player.hasBinaryTrade && playerBits > 0) {
-        playerBits -= 1;
         if (playerBits % 2 === 0) damageMult *= 2.0;
         else count += 2;
     }
