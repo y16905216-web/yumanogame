@@ -992,15 +992,13 @@ function showTowerFloorSelect() {
                 <div class="floor-reward" style="color:#00ff41;">BITS: +${opt.rewardBits || 0}</div>
             </div>
         `;
-        const startFn = () => {
+        const startFn = (e) => {
+            if (e) e.stopPropagation();
             console.log("Floor card clicked:", opt);
             TowerManager.startFloor(opt);
         };
         card.onclick = startFn;
-        card.ontouchstart = (e) => {
-            e.preventDefault();
-            startFn();
-        };
+        // card.ontouchstart = (e) => { ... }; // Remove problematic touch listener
         container.appendChild(card);
     });
 }
@@ -1325,6 +1323,25 @@ function updateConditionCache() {
 
 function evaluateCondition(condId, target = null) {
     return checkCondition(condId, target);
+}
+
+function calculateSynergyBonus(colorName) {
+    if (!player.activeModules) return 1.0;
+    const colorMap = {
+        'red': '#ff4444',
+        'blue': '#4444ff',
+        'green': '#44ff44',
+        'yellow': '#ffff44'
+    };
+    const targetColor = colorMap[colorName];
+    const count = player.activeModules.filter(m => {
+        const b = BLOCKS.find(x => x.id === m.id);
+        return b && b.color === targetColor;
+    }).length;
+    
+    if (count >= 5) return 1.5;
+    if (count >= 3) return 1.2;
+    return 1.0;
 }
 
 function applyStaticStats() {
