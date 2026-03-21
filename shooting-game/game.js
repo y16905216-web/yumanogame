@@ -891,24 +891,47 @@ function showTowerFloorSelect() {
     const container = document.getElementById('floor-options-container');
     container.innerHTML = '';
     
+    // プログレスバー（サイドバー）の生成
+    const sidebar = document.getElementById('tower-progress-sidebar');
+    if (sidebar) {
+        sidebar.innerHTML = '';
+        for (let i = 1; i <= 30; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'tower-dot';
+            if (i < towerState.currentFloor) dot.classList.add('cleared');
+            if (i === towerState.currentFloor) dot.classList.add('active');
+            dot.setAttribute('data-floor', `F${i.toString().padStart(2, '0')}`);
+            sidebar.appendChild(dot);
+            if (i === towerState.currentFloor) {
+                setTimeout(() => {
+                    dot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
+            }
+        }
+    }
+
     towerState.floorOptions = TowerManager.generateFloors();
     towerState.floorOptions.forEach(opt => {
         const card = document.createElement('div');
-        card.className = `floor-card type-${opt.color || 'neutral'}`;
+        card.className = `floor-card type-${opt.color || 'blue'}`;
         
-        let rewardName = "UNKNOWN_BLOCK";
+        let rewardName = "???";
         if (opt.rewardBlockId) {
             const b = BLOCKS.find(x => x.id === opt.rewardBlockId);
-            if (b) rewardName = b.label.replace(/\[.*\]/, b.id.split('-').pop());
-        } else if (opt.type === 'shop') rewardName = "REST & UPGRADE";
-        else if (opt.type === 'boss') rewardName = "MASTER_CORE_ACCESS";
+            if (b) rewardName = b.label.split(']')[1] || b.label;
+        } else if (opt.type === 'shop') rewardName = "REST_SHOP";
+        else if (opt.type === 'boss') rewardName = "MASTER_CORE";
 
         card.innerHTML = `
-            <div class="floor-diff">${opt.difficulty}</div>
-            <div style="font-size:1.2rem; margin:10px 0;">${opt.type.toUpperCase()}</div>
-            <div class="floor-reward">CHIP: ${rewardName}</div>
-            <div class="floor-reward">BITS: +${opt.rewardBits}</div>
-            ${opt.trouble ? `<div class="floor-trouble">[TROUBLE: ${opt.trouble.toUpperCase()}]</div>` : ''}
+            <div class="floor-info-left">
+                <div class="floor-diff">${opt.difficulty}</div>
+                <div style="font-size:0.9rem; color:#fff;">${opt.type.toUpperCase()}</div>
+                ${opt.trouble ? `<div class="floor-trouble">[! ERROR: ${opt.trouble.toUpperCase()}]</div>` : ''}
+            </div>
+            <div class="floor-info-right">
+                <div class="floor-reward">CHIP: ${rewardName}</div>
+                <div class="floor-reward" style="color:#00ff41;">BITS: +${opt.rewardBits || 0}</div>
+            </div>
         `;
         card.onclick = () => TowerManager.startFloor(opt);
         container.appendChild(card);

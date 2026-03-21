@@ -863,15 +863,75 @@ button:hover::after {
 }
 
 /* --- TOWER MODE --- */
+.tower-layout {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+#floor-options-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.tower-progress-sidebar {
+    display: flex;
+    flex-direction: column-reverse; /* 下から1F */
+    gap: 4px;
+    background: rgba(0,0,0,0.5);
+    padding: 10px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    height: 350px;
+    overflow-y: auto;
+}
+
+.tower-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #222;
+    border: 1px solid #444;
+    position: relative;
+}
+
+.tower-dot.active {
+    background: #f0f;
+    box-shadow: 0 0 8px #f0f;
+    border-color: #fff;
+}
+
+.tower-dot.cleared {
+    background: #00ff41;
+}
+
+.tower-dot::after {
+    content: attr(data-floor);
+    position: absolute;
+    left: 20px;
+    top: -2px;
+    font-size: 0.6rem;
+    color: #666;
+}
+
+.tower-dot.active::after {
+    color: #fff;
+    font-weight: bold;
+}
+
 .floor-card {
-    width: 240px;
+    width: 320px;
     background: rgba(0, 0, 0, 0.8);
     border: 1px solid #444;
-    padding: 15px;
+    padding: 12px 20px;
     cursor: pointer;
     transition: 0.2s;
     display: flex;
-    flex-direction: column;
+    flex-direction: row; /* 横並びにしてコンパクトに */
+    justify-content: space-between;
     align-items: center;
     border-radius: 8px;
     position: relative;
@@ -881,7 +941,7 @@ button:hover::after {
 .floor-card:hover {
     border-color: #f0f;
     box-shadow: 0 0 15px rgba(255, 0, 255, 0.3);
-    transform: translateY(-5px);
+    background: rgba(40, 0, 40, 0.8);
 }
 
 .floor-card.type-red { border-left: 5px solid #ff3d00; }
@@ -889,9 +949,11 @@ button:hover::after {
 .floor-card.type-green { border-left: 5px solid #00ff41; }
 .floor-card.type-yellow { border-left: 5px solid #ffea00; }
 
-.floor-diff { font-size: 0.8rem; font-weight: bold; margin-bottom: 5px; }
-.floor-reward { font-size: 0.7rem; color: #aaa; margin-top: 10px; }
-.floor-trouble { color: #f00; font-size: 0.6rem; margin-top: 5px; font-weight: bold; }
+.floor-info-left { text-align: left; }
+.floor-info-right { text-align: right; }
+.floor-diff { font-size: 0.8rem; font-weight: bold; color: #f0f; }
+.floor-reward { font-size: 0.65rem; color: #aaa; margin-top: 2px; }
+.floor-trouble { color: #f00; font-size: 0.6rem; margin-top: 2px; font-weight: bold; }
 
 #darkness-overlay {
     position: absolute;
