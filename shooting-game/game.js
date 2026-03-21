@@ -30,7 +30,7 @@ let nextBossScore = 60;
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window);
 
 let player = {
-    x: canvas.width / 2, y: canvas.height - 60, w: 30, h: 30,
+    x: canvas.width / 2, y: canvas.height / 2, w: 30, h: 30,
     speed: PLAYER_SPEED, fireRate: 180, multiShot: 1, piercing: false, shield: 0,
     activeModules: [], // インストールされたモジュール {id, param}
     subShips: 0,
@@ -108,11 +108,11 @@ let contactFlags = {
 
 // スターターセットを強制的にアンロック (既存プレイヤー対応)
 const starters = [
-    'main-shot-count', 'passive-speed', 'num-1'
+    'main-shot-count', 'passive-hitbox', 'num-1'
 ];
 const starterCounts = {
     'main-shot-count': 3,
-    'passive-speed': 3,
+    'passive-hitbox': 3,
     'num-1': 10,
     'num-3': 10,
     'num-5': 10,
@@ -179,6 +179,28 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys[e.key] = false);
 
+let mouseX = canvas.width / 2;
+let mouseY = canvas.height / 2;
+
+canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    mouseX = (e.clientX - rect.left) * scaleX;
+    mouseY = (e.clientY - rect.top) * scaleY;
+});
+
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches && e.touches.length > 0) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        mouseX = (e.touches[0].clientX - rect.left) * scaleX;
+        mouseY = (e.touches[0].clientY - rect.top) * scaleY;
+    }
+}, { passive: false });
+
 
 // --- 4. クラス定義 ---
 
@@ -229,13 +251,11 @@ const BLOCKS = [
     { id: 'skill-all-bomb', category: CATEGORIES.SKILL, label: '[ 画面全体ボム ] を使う', desc: '画面上の敵弾をすべて消去', hasParam: false, icon: '💥' },
     { id: 'skill-damage-enemy', category: CATEGORIES.SKILL, label: '敵機に [ 全体ダメージ ] を与える', desc: '画面上の敵すべてにダメージ', hasParam: false, icon: '💣' },
     { id: 'skill-time-stop', category: CATEGORIES.SKILL, label: '[ 時間を止める ]', desc: '数秒間、自分以外の動きを停止させる', hasParam: false, icon: '⏳' },
-    { id: 'skill-warp', category: CATEGORIES.SKILL, label: '[ ワープ ] する', desc: '指定した方向に瞬間移動して回避', hasParam: false, icon: '🌌' },
     { id: 'skill-invincible', category: CATEGORIES.SKILL, label: '[ 無敵状態 ] になる', desc: '一定時間、体当たりで敵を破壊可能', hasParam: false, icon: '👻' },
 
     // ... (Passive and System remain mapped by their IDs later)
 
     // 3. 機体性能（パッシブ・常時発動）
-    { id: 'passive-speed', category: CATEGORIES.PASSIVE, label: '[ 移動速度 ] を [ {p} ] ％上げる', desc: '操作レスポンスの向上', hasParam: true, paramType: 'number', defaultParam: 20, maxParam: 100, icon: '👟' },
     { id: 'passive-hitbox', category: CATEGORIES.PASSIVE, label: '[ 当たり判定 ] を小さくする', desc: '敵の弾を避けやすくする', hasParam: false, icon: '💠' },
     { id: 'passive-magnet', category: CATEGORIES.PASSIVE, label: '[ マグネット ] 機能をオンにする', desc: '落ちているアイテムを自動回収', hasParam: false, icon: '🧲' },
     { id: 'passive-auto-heal', category: CATEGORIES.PASSIVE, label: '[ 自動回復 ] 機能をオンにする', desc: '時間経過で体力が回復', hasParam: false, icon: '💊' },
@@ -247,7 +267,7 @@ const BLOCKS = [
     { id: 'system-explode', category: CATEGORIES.SYSTEM, label: '敵が倒れたときに [ 爆発 ] させる', desc: '連鎖爆破で敵を一掃', hasParam: false, icon: '🧨' },
     { id: 'system-slow', category: CATEGORIES.SYSTEM, label: '[ スローモーション ] モードにする', desc: '弾幕を避けやすくする', hasParam: false, icon: '⏬' },
     { id: 'system-endure', category: CATEGORIES.SYSTEM, label: '[ くいしばり ] を発動する', desc: '一度だけHP1で耐える', hasParam: false, icon: '✊' },
-    { id: 'system-auto-fire', category: CATEGORIES.SYSTEM, label: '[ オート連射 ] をオンにする', desc: 'ボタン連打の手間を省く', hasParam: false, icon: '🤖' },
+    { id: 'system-auto-fire', category: CATEGORIES.SYSTEM, label: '[ オートエイム ] をオンにする', desc: '自動で敵を狙って撃つ', hasParam: false, icon: '🤖' },
 
     // 5. 数字ブロック (新分類)
     { id: 'num-1', category: CATEGORIES.PARAM, label: '1', value: 1, maxUsage: 10, icon: '1️⃣' },
@@ -303,7 +323,6 @@ const BLOCKS = [
     // --- Phase 2: NEW BLOCKS ---
     { id: 'effect-echo', category: CATEGORIES.SKILL, label: '[ 残響 ]', desc: '敵を倒すと衝撃波が発生し、周囲の敵を被ダメージ1.5倍にする', icon: '📡' },
     { id: 'system-binary-trade', category: CATEGORIES.SYSTEM, label: '[ 等価交換 ]', desc: '射撃時にビットを消費。ビットが偶数なら威力UP、奇数なら弾数UP', icon: '⚖️' },
-    { id: 'passive-inertia', category: CATEGORIES.PASSIVE, label: '[ 慣性 ]', desc: '自機の移動速度を弾の威力に加算する', icon: '🏎️' },
     { id: 'main-compress', category: CATEGORIES.MAIN, label: '[ 圧縮 ]', desc: '長押しでチャージし、超高密度弾を放つ', icon: '💎' },
     { id: 'main-latency', category: CATEGORIES.MAIN, label: '[ 遅延 ]', desc: '貫通弾の軌跡が数秒後に爆発する', icon: '⏱️' },
     { id: 'skill-synchro', category: CATEGORIES.SKILL, label: '[ 同期 ]', desc: '画面内に弾が5発以上あるとき、全弾が敵をホーミングする', icon: '🔗' },
@@ -1013,7 +1032,6 @@ function applyActionEffect(actionId, p, target = null) {
 
         case 'skill-option': player.subShips += (p || 1); break; // 加算スタック
 
-        case 'passive-speed': player.speed += PLAYER_SPEED * (p || 10) / 100; break; // 加算スタック
         case 'passive-hitbox': player.hitboxSizeMult *= 0.8; break; // 乗算スタック（どんどん小さく）
         case 'passive-magnet': player.isMagnet = true; break;
         case 'passive-auto-heal': player.autoHeal += 0.03; break; // バフ: 3倍速回復
@@ -1058,7 +1076,6 @@ function applyActionEffect(actionId, p, target = null) {
 
         case 'effect-echo': player.hasEcho = true; break;
         case 'system-binary-trade': player.hasBinaryTrade = true; break;
-        case 'passive-inertia': player.hasInertia = true; break;
         case 'main-compress': player.hasCompress = true; break;
         case 'main-latency': player.hasLatency = true; obj.isPiercing = true; break;
         case 'skill-synchro': player.hasSynchro = true; break;
@@ -1106,17 +1123,6 @@ function triggerSkill(skillId, param) {
             player.isTimeStopped = true;
             setTimeout(() => { player.isTimeStopped = false; }, 3000);
             addLog("TIME_STASIS", "hack");
-            break;
-        case 'skill-warp':
-            let dx = 0, dy = 0;
-            if (keys['ArrowLeft']) dx = -100;
-            if (keys['ArrowRight']) dx = 100;
-            if (keys['ArrowUp']) dy = -100;
-            if (keys['ArrowDown']) dy = 100;
-            player.x = Math.max(20, Math.min(canvas.width - 20, player.x + dx));
-            player.y = Math.max(20, Math.min(canvas.height - 20, player.y + dy));
-            createExplosion(player.x, player.y, '#0ff', 10);
-            addLog("WARP_JUMP", "hack");
             break;
         case 'skill-invincible':
             player.isInvincible = true;
@@ -1757,8 +1763,10 @@ function startGame() {
     gameOver = false;
     gameActive = true;
     isHacking = false;
-
-    player.activeModules = [];
+    player.x = canvas.width / 2;
+    player.y = canvas.height / 2;
+    
+    player.activeModules = []; 
     player.barrierTimer = 0;
     player.isTimeStopped = false;
     player.isInvincible = false;
@@ -1809,23 +1817,8 @@ function backToHome() {
 
 // モバイル操作の実装
 if (isMobile) {
-    const leftBtn = document.getElementById('move-left-btn');
-    const rightBtn = document.getElementById('move-right-btn');
-    const shootBtn = document.getElementById('shoot-btn');
     const hackBtn = document.getElementById('hack-btn');
 
-    if (leftBtn) {
-        leftBtn.addEventListener('touchstart', e => { e.preventDefault(); keys['ArrowLeft'] = true; });
-        leftBtn.addEventListener('touchend', e => { e.preventDefault(); keys['ArrowLeft'] = false; });
-    }
-    if (rightBtn) {
-        rightBtn.addEventListener('touchstart', e => { e.preventDefault(); keys['ArrowRight'] = true; });
-        rightBtn.addEventListener('touchend', e => { e.preventDefault(); keys['ArrowRight'] = false; });
-    }
-    if (shootBtn) {
-        shootBtn.addEventListener('touchstart', e => { e.preventDefault(); keys['a'] = true; });
-        shootBtn.addEventListener('touchend', e => { e.preventDefault(); keys['a'] = false; });
-    }
     if (hackBtn) {
         hackBtn.addEventListener('touchstart', e => { e.preventDefault(); keys['s'] = true; });
         hackBtn.addEventListener('touchend', e => { e.preventDefault(); keys['s'] = false; });
@@ -1924,40 +1917,27 @@ function update() {
 
     updateUI();
 
-    // プレイヤー移動
-    let moveX = 0;
-    let moveY = 0;
-    if (keys['ArrowLeft']) moveX -= player.speed;
-    if (keys['ArrowRight']) moveX += player.speed;
-    if (keys['ArrowUp']) moveY -= player.speed;
-    if (keys['ArrowDown']) moveY += player.speed;
+    // プレイヤー移動 (固定砲台)
+    player.x = canvas.width / 2;
+    player.y = canvas.height / 2;
+    player.moveX = 0;
+    player.moveY = 0;
 
-    player.x += moveX;
-    player.y += moveY;
-    player.moveX = moveX; // Track for Inertia Drive
-    player.moveY = moveY;
-    player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
-    player.y = Math.max(20, Math.min(canvas.height - 20, player.y));
-
-    // Aキー: 射撃
-    if (keys['a'] || keys['A'] || player.autoFire) {
-        if (player.hasCompress) {
-            player.chargeLevel = Math.min(100, (player.chargeLevel || 0) + (player.autoFire ? 2 : 1) * (1 + (player.fireRateBonus || 0)));
-        } else {
-            const shootReady = !player.lastFireTime || now - player.lastFireTime > player.fireRate;
-            if (shootReady) {
-                fireBullets(now);
-                player.lastFireTime = now;
-            }
-        }
-    } else {
-        if (player.hasCompress && player.chargeLevel > 20) {
-            fireBullets(now, player.chargeLevel / 100);
+    // 自動連射 (常に射撃)
+    if (player.hasCompress) {
+        player.chargeLevel = Math.min(100, (player.chargeLevel || 0) + 2 * (1 + (player.fireRateBonus || 0)));
+        if (player.chargeLevel >= 100) {
+            fireBullets(now, 1.0);
             player.chargeLevel = 0;
             player.lastFireTime = now;
-        } else {
-            player.chargeLevel = 0;
         }
+    } else {
+        const shootReady = !player.lastFireTime || now - player.lastFireTime > player.fireRate;
+        if (shootReady && !player.isTimeStopped && player.disarmedTimer <= 0) {
+            fireBullets(now);
+            player.lastFireTime = now;
+        }
+        player.chargeLevel = 0;
     }
 
     // Reboot Step: Invincibility Timer
@@ -2135,10 +2115,32 @@ function fireBullets(now, chargeScale = 0) {
         bulletSize *= (1 + chargeScale * 3);
         count = 1; // 1つに凝縮
     }
+    
+    let targetX = mouseX;
+    let targetY = mouseY;
+    
+    // オートエイム機能 [system-auto-fire]
+    if (player.autoFire) {
+        let nearestEnemy = null;
+        let minDist = Infinity;
+        enemies.forEach(e => {
+            const d = Math.hypot(e.x - player.x, e.y - player.y);
+            if (d < minDist) {
+                minDist = d;
+                nearestEnemy = e;
+            }
+        });
+        if (nearestEnemy) {
+            targetX = nearestEnemy.x;
+            targetY = nearestEnemy.y;
+        }
+    }
+
+    const baseAngle = Math.atan2(targetY - player.y, targetX - player.x);
     const spread = 0.2;
     for (let i = 0; i < count; i++) {
         const offset = (i - (count - 1) / 2) * spread;
-        const angle = -Math.PI / 2 + offset;
+        const angle = baseAngle + offset;
         const vx = Math.cos(angle) * bulletSpeed;
         const vy = Math.sin(angle) * bulletSpeed;
 
@@ -2190,21 +2192,26 @@ function fireBullets(now, chargeScale = 0) {
     }
 
     if (player.isRearShot) {
-        const angle = Math.PI / 2;
-        bullets.push({
-            x: player.x, y: player.y + 20,
-            vx: Math.cos(angle) * bulletSpeed, vy: Math.sin(angle) * bulletSpeed,
-            baseVx: 0, baseVy: bulletSpeed,
-            color: '#f0f', size: 1.0, life: 180, time: 0
+        const rearAngle = baseAngle + Math.PI;
+        bullets.push({ 
+            x: player.x, y: player.y, 
+            vx: Math.cos(rearAngle) * bulletSpeed, vy: Math.sin(rearAngle) * bulletSpeed,
+            baseVx: Math.cos(rearAngle) * bulletSpeed, baseVy: Math.sin(rearAngle) * bulletSpeed, 
+            color: '#f0f', size: 1.0, life: 180, time: 0 
         });
     }
 
     // サブ機の射撃もプロパティ継承
     for (let i = 0; i < player.subShips; i++) {
         const offset = (i + 1) * 30 * (i % 2 === 0 ? 1 : -1);
+        const subX = player.x + Math.cos(baseAngle + Math.PI/2) * offset;
+        const subY = player.y + Math.sin(baseAngle + Math.PI/2) * offset;
         bullets.push({
-            x: player.x + offset, y: player.y,
-            vx: 0, vy: -bulletSpeed, baseVx: 0, baseVy: -bulletSpeed,
+            x: subX, y: subY,
+            vx: Math.cos(baseAngle) * bulletSpeed, 
+            vy: Math.sin(baseAngle) * bulletSpeed,
+            baseVx: Math.cos(baseAngle) * bulletSpeed, 
+            baseVy: Math.sin(baseAngle) * bulletSpeed,
             color: '#0f4', size: bulletSize, life: 180, time: 0,
             isPiercing: player.isPiercing, isExplosion: player.isExplosion
         });
