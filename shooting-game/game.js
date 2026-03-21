@@ -7,7 +7,7 @@ canvas.height = 540;
 // --- 1. 定数・初期設定 ---
 const MAX_HP = 100;
 const PLAYER_SPEED = 5;
-const ENEMY_SPAWN_RATE = 0.04;
+const ENEMY_SPAWN_RATE = 0.03; // 出現率を低下 (0.06 -> 0.03)
 const HACK_DURATION = 5000;
 const CLEAR_TIME = 180; // 3分でゴール到達
 
@@ -1390,19 +1390,24 @@ function gameClear() {
 
 class Enemy {
     constructor() {
+        // 4辺のどこかからランダムにスポーン
         const side = Math.floor(Math.random() * 4);
-        if (side === 0) { // Top
-            this.x = Math.random() * (canvas.width - 40) + 20;
+        if (side === 0) { // 上から
+            this.x = Math.random() * canvas.width;
             this.y = -20;
-        } else if (side === 1) { // Bottom
-            this.x = Math.random() * (canvas.width - 40) + 20;
+            this.dirX = 0; this.dirY = 1;
+        } else if (side === 1) { // 下から
+            this.x = Math.random() * canvas.width;
             this.y = canvas.height + 20;
-        } else if (side === 2) { // Left
+            this.dirX = 0; this.dirY = -1;
+        } else if (side === 2) { // 左から
             this.x = -20;
-            this.y = Math.random() * (canvas.height - 40) + 20;
-        } else { // Right
+            this.y = Math.random() * canvas.height;
+            this.dirX = 1; this.dirY = 0;
+        } else { // 右から
             this.x = canvas.width + 20;
-            this.y = Math.random() * (canvas.height - 40) + 20;
+            this.y = Math.random() * canvas.height;
+            this.dirX = -1; this.dirY = 0;
         }
 
         let baseHp = 1 + Math.floor(playerPowerLevel * 0.8);
@@ -1520,17 +1525,8 @@ class Enemy {
             }
         }
 
-        // プレイヤーの方向へ向かう
-        const targetObj = decoys.length > 0 ? decoys[0] : player;
-        const dx = targetObj.x - this.x;
-        const dy = targetObj.y - this.y;
-        const dist = Math.hypot(dx, dy);
-        
-        if (dist > 0) {
-            this.x += (dx / dist) * this.speed * speedMult;
-            this.y += (dy / dist) * this.speed * speedMult;
-        }
-        
+        this.y += this.speed * speedMult * (this.dirY || 1);
+        this.x += this.speed * speedMult * (this.dirX || 0);
         this.angle += 0.05 * speedMult;
 
         // 全てのブラックホールに吸い寄せられる
@@ -2529,8 +2525,17 @@ function updateEnemies() {
         let speedMult = player.isTimeStopped ? 0 : (player.isSlowMotion ? 0.5 : 1);
         if (e.isShrink) speedMult *= 0.6;
         e.update(speedMult);
-        if (e.x < -200 || e.x > canvas.width + 200 || e.y < -200 || e.y > canvas.height + 200) return false;
+        // 画面外チェック (4辺すべて)
+        if (e.y > canvas.height + 60 || e.y < -60 || e.x < -60 || e.x > canvas.width + 60) return false;
 
+        // ターゲット (デコイがいれば優先)
+        const targetObj = decoys.length > 0 ? decoys[0] : player;
+        if (decoys.length > 0) {
+            const dx = targetObj.x - e.x;
+            const dy = targetObj.y - e.y;
+            const dist = Math.hypot(dx, dy);
+            e.x += (dx / dist) * 1.0;
+        }
 
         // 自機衝突
         if (Math.hypot(e.x - player.x, e.y - player.y) < 15 * player.hitboxSizeMult + 15) {
@@ -2637,9 +2642,8 @@ function draw() {
     }
     ctx.stroke();
 
-    // 背景コード雨 (廃止)
-
-    // プレイヤー描画 (機械っぽいデザイン)
+    // プレイヤー描画 (戦車デザイン)
+    ctx.globalCompositeOperation = 'source-over';
     ctx.save();
     ctx.translate(player.x, player.y);
 
@@ -2647,57 +2651,59 @@ function draw() {
         ctx.globalAlpha = Math.sin(Date.now() / 50) * 0.5 + 0.5;
     }
 
-    // --- ここから戦車デザイン ---
-    // 車体 (シャーシ)
-    ctx.fillStyle = '#113311'; // 深緑の装甲
+    // キャタピラ (左右)
+    ctx.fillStyle = '#333';
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    // 左キャタピラ
+    ctx.fillRect(-22, -14, 8, 28);
+    ctx.strokeRect(-22, -14, 8, 28);
+    // 右キャタピラ
+    ctx.fillRect(14, -14, 8, 28);
+    ctx.strokeRect(14, -14, 8, 28);
+
+    // 装甲プレート (キャタピラの小分けライン)
+    ctx.strokeStyle = '#444';
+    for (let d = -14; d < 14; d += 7) {
+        ctx.beginPath();
+        ctx.moveTo(-22, d); ctx.lineTo(-14, d);
+        ctx.moveTo(14, d); ctx.lineTo(22, d);
+        ctx.stroke();
+    }
+
+    // 車体メイン
+    ctx.fillStyle = '#1c2a1c';
     ctx.strokeStyle = '#00ff41';
     ctx.lineWidth = 2;
-    ctx.fillRect(-15, -20, 30, 40);
-    ctx.strokeRect(-15, -20, 30, 40);
+    ctx.fillRect(-14, -12, 28, 24);
+    ctx.strokeRect(-14, -12, 28, 24);
 
-    // 履帯 (キャタピラ)
-    ctx.fillStyle = '#222';
-    ctx.fillRect(-22, -22, 7, 44);
-    ctx.fillRect(15, -22, 7, 44);
-    ctx.strokeRect(-22, -22, 7, 44);
-    ctx.strokeRect(15, -22, 7, 44);
-
-    // 砲塔の回転 (砲身の向き)
-    let targetX = mouseX, targetY = mouseY;
-    if (player.autoFire) {
-        let nearestEnemy = null; let minDist = Infinity;
-        enemies.forEach(e => {
-            const d = Math.hypot(e.x - player.x, e.y - player.y);
-            if (d < minDist) { minDist = d; nearestEnemy = e; }
-        });
-        if (nearestEnemy) { targetX = nearestEnemy.x; targetY = nearestEnemy.y; }
-    }
-    const aimAngle = Math.atan2(targetY - player.y, targetX - player.x);
-
-    ctx.save();
-    ctx.rotate(aimAngle);
-
-    // 砲身
-    ctx.fillStyle = '#0a220a';
-    ctx.fillRect(0, -4, 25, 8);
-    ctx.strokeRect(0, -4, 25, 8);
-
-    // 砲塔ベース (円形)
+    // 砲塔 (回転ハウス)
+    ctx.fillStyle = '#223a22';
+    ctx.strokeStyle = '#00ff41';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
-    ctx.fillStyle = '#1a4a1a';
+    ctx.arc(0, 0, 10, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // コア (光る部分)
+    // 砲身 (マウス方向に向く)
+    const barrelAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+    ctx.save();
+    ctx.rotate(barrelAngle);
+    ctx.fillStyle = '#00ff41';
+    ctx.fillRect(6, -3, 18, 6); // 砲身本体
+    ctx.fillStyle = '#003300';
+    ctx.fillRect(6, -3, 5, 6);  // 砲身根元の補強
+    ctx.restore();
+
+    // コア発光
     ctx.beginPath();
-    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.arc(0, 0, 3, 0, Math.PI * 2);
     ctx.fillStyle = '#0ff';
     ctx.fill();
 
     ctx.restore();
-    ctx.restore();
-
 
     // バリア描画
     if (player.barrierTimer > 0) {
