@@ -239,9 +239,8 @@ class TowerManager {
         updateUI();
         
         // トラブルフロア演出
-        if (towerState.currentTrouble === 'darkness') {
-            addLog("!! WARNING: VISUAL_SENSOR_FAILURE (暗晦状態)", "error");
-        }
+        console.log("Starting floor:", option);
+        addLog(`FLOOR_${towerState.currentFloor}_START: ${option.difficulty}`, "hack");
         
         closeOverlays();
     }
@@ -993,7 +992,15 @@ function showTowerFloorSelect() {
                 <div class="floor-reward" style="color:#00ff41;">BITS: +${opt.rewardBits || 0}</div>
             </div>
         `;
-        card.onclick = () => TowerManager.startFloor(opt);
+        const startFn = () => {
+            console.log("Floor card clicked:", opt);
+            TowerManager.startFloor(opt);
+        };
+        card.onclick = startFn;
+        card.ontouchstart = (e) => {
+            e.preventDefault();
+            startFn();
+        };
         container.appendChild(card);
     });
 }

@@ -14,12 +14,21 @@ body {
 
 #game-container {
     position: relative;
-    width: 98vw;
-    height: 55.125vw;
-    /* 9:16 aspect */
-    max-width: 960px;
+    /* 16:9 Aspect Ratio Container */
+    width: 100vw;
+    height: 56.25vw; /* (9 / 16 * 100) */
+    max-width: 177.78vh; /* (16 / 9 * 100) */
     max-height: 100vh;
-    margin: 0 auto;
+    
+    /* Center in screen */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+
+    max-width: 960px; /* PC最大サイズ制限 */
+    max-height: 540px;
+
     background: #000;
     /* 背景グリッドエフェクト */
     background-image:
@@ -229,9 +238,9 @@ button:hover::after {
 /* HUD */
 #side-hud {
     position: absolute;
-    top: 10px;
-    left: 10px;
-    right: 10px;
+    top: 20px;
+    left: 40px;
+    right: 40px;
     display: flex;
     justify-content: space-between;
     pointer-events: none;
@@ -266,7 +275,7 @@ button:hover::after {
 #log-container {
     position: absolute;
     bottom: 200px;
-    left: 10px;
+    left: 40px;
     width: 180px;
     pointer-events: none;
     z-index: 50;
@@ -914,10 +923,13 @@ button:hover::after {
 /* --- TOWER MODE --- */
 .tower-layout {
     display: flex;
-    gap: 30px;
-    align-items: flex-start;
+    gap: 20px;
+    align-items: center;
     justify-content: center;
-    margin-top: 20px;
+    margin-top: 10px;
+    width: 100%;
+    max-width: 800px;
+    flex-wrap: wrap; /* スマホで縦に並ぶように */
 }
 
 #floor-options-container {
@@ -972,25 +984,29 @@ button:hover::after {
 }
 
 .floor-card {
-    width: 320px;
-    background: rgba(0, 0, 0, 0.8);
+    width: 280px; /* 少し小さくしてスマホで入りやすく */
+    max-width: 90vw;
+    background: rgba(0, 0, 0, 0.85);
     border: 1px solid #444;
-    padding: 12px 20px;
+    padding: 10px 15px;
     cursor: pointer;
     transition: 0.2s;
     display: flex;
-    flex-direction: row; /* 横並びにしてコンパクトに */
+    flex-direction: row;
     justify-content: space-between;
     align-items: center;
     border-radius: 8px;
     position: relative;
     overflow: hidden;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
-.floor-card:hover {
+.floor-card:hover, .floor-card:active {
     border-color: #f0f;
-    box-shadow: 0 0 15px rgba(255, 0, 255, 0.3);
-    background: rgba(40, 0, 40, 0.8);
+    box-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
+    background: rgba(40, 0, 40, 0.9);
+    transform: scale(1.02);
 }
 
 .floor-card.type-red { border-left: 5px solid #ff3d00; }
