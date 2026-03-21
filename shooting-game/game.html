@@ -80,6 +80,10 @@
             <div class="nav-bar" style="display:flex; justify-content:center; gap:10px;">
                 <button id="nav-start" class="btn-primary">開始 [START]</button>
                 <button id="nav-start-easy" class="btn-primary" style="background:#0ff; color:#000;">易開始 [EASY]</button>
+                <button id="nav-start-tower" class="btn-primary" style="background:#f0f; color:#fff;">執念 [TOWER]</button>
+            </div>
+            <div style="margin-top:10px;">
+                <button id="nav-tower-hacking" class="btn-primary" style="font-size:0.6rem; padding:5px 10px;">永続強化 [META_HACK]</button>
             </div>
         </div>
 
@@ -199,6 +203,26 @@
                 <button id="clear-retry-btn">もう一度挑戦</button>
                 <button id="clear-home-btn">ホームへ戻る</button>
             </div>
+        </div>
+
+        <!-- TOWER FLOOR SELECT -->
+        <div id="tower-floor-select" class="overlay hidden">
+            <h2 style="color:#f0f; text-shadow:0 0 10px #f0f;">FLOOR_SELECT // <span id="tower-floor-num">F01</span></h2>
+            <div id="floor-options-container" style="display:flex; gap:20px; margin-top:30px;">
+                <!-- JSで生成 -->
+            </div>
+        </div>
+
+        <!-- TOWER PERMANENT HACKING -->
+        <div id="tower-meta-hack" class="modal hidden">
+            <div class="modal-header">永続強化セッション [META_UPGRADE]</div>
+            <div style="padding:20px;">
+                <div id="meta-hack-bits" style="color:#00ff41; font-family:monospace; margin-bottom:10px;">AVAILABLE_BITS: 0</div>
+                <div id="meta-upgrade-list" style="display:flex; flex-direction:column; gap:10px;">
+                    <!-- JSで生成 -->
+                </div>
+            </div>
+            <button class="close-modal" onclick="closeTowerMetaHack()">戻る [RETURN]</button>
         </div>
 
         <!-- MOBILE CONTROLS -->
