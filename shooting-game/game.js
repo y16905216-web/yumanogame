@@ -1525,8 +1525,14 @@ class Enemy {
             }
         }
 
-        this.y += this.speed * speedMult * (this.dirY || 1);
-        this.x += this.speed * speedMult * (this.dirX || 0);
+        // プレイヤーの方向に向かって移動（360度全方位）
+        if (!this.isBoss) {
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.x += (dx / dist) * this.speed * speedMult;
+            this.y += (dy / dist) * this.speed * speedMult;
+        }
         this.angle += 0.05 * speedMult;
 
         // 全てのブラックホールに吸い寄せられる
@@ -1670,54 +1676,26 @@ class Boss extends Enemy {
 
     update(speedMult) {
         if (this.state === 'enter') {
-            this.y += 1;
-            if (this.y >= this.targetY) this.state = 'active';
+            // 中心に向かって進入
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const dist = Math.hypot(dx, dy);
+            this.x += (dx / dist) * 2;
+            this.y += (dy / dist) * 2;
+            if (dist < 120) this.state = 'active';
             return;
         }
 
         this.patternTimer++;
         this.angle += 0.02;
 
-        if (this.patternTimer % 300 === 0) {
-            this.pattern = (this.pattern + 1) % 3;
-        }
-
-        // Attack patterns (Buffed Aggression)
-        if (this.pattern === 0) { // Fan
-            if (this.patternTimer % 45 === 0) {
-                for (let i = -2; i <= 2; i++) {
-                    const angle = Math.atan2(player.y - this.y, player.x - this.x) + i * 0.3;
-                    enemyBullets.push({
-                        x: this.x, y: this.y,
-                        vx: Math.cos(angle) * 3, vy: Math.sin(angle) * 3,
-                        color: '#f0f', size: 1.5, life: 300
-                    });
-                }
-            }
-        } else if (this.pattern === 1) { // Rotate
-            if (this.patternTimer % 8 === 0) {
-                const count = 3;
-                for (let i = 0; i < count; i++) {
-                    const angle = this.angle * 2 + (i * Math.PI * 2 / count);
-                    enemyBullets.push({
-                        x: this.x, y: this.y,
-                        vx: Math.cos(angle) * 2.5, vy: Math.sin(angle) * 2.5,
-                        color: '#ff0', size: 1.2, life: 300
-                    });
-                }
-            }
-        } else if (this.pattern === 2) { // Sniper
-            if (this.patternTimer % 60 === 0) {
-                const angle = Math.atan2(player.y - this.y, player.x - this.x);
-                enemyBullets.push({
-                    x: this.x, y: this.y,
-                    vx: Math.cos(angle) * 7, vy: Math.sin(angle) * 7,
-                    color: '#f00', size: 2.0, life: 300, isSniper: true
-                });
-            }
-        }
-
-        this.x += Math.sin(this.patternTimer / 50) * 1.5;
+        // ノーマルスピードでプレイヤーに突進する
+        const bossSpeed = 1.5;
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        this.x += (dx / dist) * bossSpeed * speedMult;
+        this.y += (dy / dist) * bossSpeed * speedMult;
     }
 
     draw() {
@@ -2304,12 +2282,24 @@ function updateProjectiles(now) {
             b.x += (b.vx + (perpX / mag) * waveOffset);
             b.y += (b.vy + (perpY / mag) * waveOffset);
         } else if (b.isBoomerang) {
-            // 往復 (Combo 3: 無限ブーメラン)
-            // 30フレームごとに進行方向を反転させて無限に往復させる (画面外消滅を防ぐため短縮)
-            if (Math.floor(b.time / 30) % 2 === 0) {
+            // 往復（1往復のみ）
+            // 画面外まで進んだら帰り、残が0で消滅
+            if (!b.boomerangReturning) {
+                // 射出方向に進む
                 b.x += b.vx; b.y += b.vy;
+                // 画面外に出たら帰り張りに切り替え
+                if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
+                    b.boomerangReturning = true;
+                    b.vx = -b.vx;
+                    b.vy = -b.vy;
+                }
             } else {
-                b.x -= b.vx; b.y -= b.vy;
+                // 帰り道: 出発地点に向かう
+                b.x += b.vx; b.y += b.vy;
+                // 出発地点に到達したら消滅
+                if (Math.hypot(b.x - b.originX, b.y - b.originY) < 20) {
+                    return false;
+                }
             }
 
             // 巨大化ブーメランならさらにヒット範囲拡大
