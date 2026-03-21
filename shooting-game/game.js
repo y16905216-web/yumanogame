@@ -1381,8 +1381,9 @@ class Enemy {
     constructor() {
         this.x = Math.random() * (canvas.width - 40) + 20;
         this.y = -20;
-        this.hp = 1; // 1撃で撃破
-        this.maxHp = 1;
+        let baseHp = 1 + Math.floor(playerPowerLevel * 0.8);
+        this.hp = baseHp;
+        this.maxHp = baseHp;
         this.color = '#0ff';
         this.speed = 2 + Math.random() * 2;
         this.angle = 0;
@@ -1894,10 +1895,11 @@ function update() {
 
     // Bossスポーン (Buffed HP)
     if (score >= nextBossScore && bossesDefeated < 3 && !enemies.some(e => e.isBoss)) {
-        // Boss Spawn
-        let hp = 200; // Boss 1 (Reduced from 400)
-        if (bossesDefeated === 1) hp = 400; // Boss 2 (Reduced from 800)
-        if (bossesDefeated === 2) hp = 800; // Boss 3 (Reduced from 1600)
+        // Boss Spawn (HP scaled with playerPowerLevel)
+        let hpMultiplier = 1 + playerPowerLevel * 0.5;
+        let hp = 200 * hpMultiplier; // Boss 1 
+        if (bossesDefeated === 1) hp = 400 * hpMultiplier; // Boss 2
+        if (bossesDefeated === 2) hp = 800 * hpMultiplier; // Boss 3
         const names = ["GATEKEEPER", "SENTINEL", "CORE_GUARDIAN"];
         enemies.push(new Boss(hp, names[bossesDefeated]));
         addLog(`!! WARNING: BOSS_SIGNAL_DETECTED !!`, 'error');
@@ -2171,8 +2173,12 @@ function updateProjectiles(now) {
             b.y += (b.vy + (perpY / mag) * waveOffset);
         } else if (b.isBoomerang) {
             // 往復 (Combo 3: 無限ブーメラン)
-            if (b.time < 60) { b.x += b.vx; b.y += b.vy; }
-            else { b.x -= b.vx; b.y -= b.vy; }
+            // 60フレームごとに進行方向を反転させて無限に往復させる
+            if (Math.floor(b.time / 60) % 2 === 0) {
+                b.x += b.vx; b.y += b.vy;
+            } else {
+                b.x -= b.vx; b.y -= b.vy;
+            }
 
             // 巨大化ブーメランならさらにヒット範囲拡大
             if (b.isGrowing) b.size = Math.min(5, b.size + 0.05);
