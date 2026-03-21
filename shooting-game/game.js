@@ -884,6 +884,7 @@ function removeFromStack(index) {
 function closeOverlays() {
     document.querySelectorAll('.overlay').forEach(o => o.classList.add('hidden'));
     document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+    closeHackingScreen();
     isPaused = false;
 }
 
@@ -1035,21 +1036,69 @@ function updateHomeBits() {
 
 // 既存ボタンのイベントリスナー追加
 document.addEventListener('DOMContentLoaded', () => {
-    const btnTower = document.getElementById('nav-start-tower');
-    if (btnTower) {
-        btnTower.onclick = () => {
+    // ナビゲーションボタンのイベントリスナー設定
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.onclick = () => selectMode(item.getAttribute('data-mode'));
+    });
+    
+    // 初期モードを選択状態にする
+    selectMode('normal');
+});
+
+const modeData = {
+    'normal': {
+        title: 'STANDARD_MODE',
+        desc: '3分間の生存テスト。自己ハッキングによるシステム改変を駆使し、迫りくる防衛プログラムを排除せよ。',
+        meta: 'TIME_LIMIT: 3:00 | MEMORY: 400MB',
+        action: () => { isEasyMode = false; isTowerMode = false; startGame(); }
+    },
+    'easy': {
+        title: 'DEBUG_EASY_MODE',
+        desc: '初心者向けモード。メモリ制限を解除し、あらゆるモジュールを自由に試行可能。リラックスして楽しめます。',
+        meta: 'TIME_LIMIT: NONE | MEMORY: UNLIMITED',
+        action: () => { isEasyMode = true; isTowerMode = false; startGame(); }
+    },
+    'tower': {
+        title: 'TOWER_INFLATION',
+        desc: 'フロア攻略モード。各階で得られる強化チップを重ねがけし、無限のインフレを体験せよ。ボスを倒すとクリア。',
+        meta: 'GOAL: FLOOR 30 | ONE_BOSS_CLEAR: ENABLED',
+        action: () => {
             isTowerMode = true;
+            isEasyMode = false;
             towerState.currentFloor = 1;
             towerState.bits = towerState.permanentUpgrades.initialBits;
             showTowerFloorSelect();
-        };
+        }
+    },
+    'metahack': {
+        title: 'META_UPGRADE',
+        desc: '永続的な機体強化。ビットを消費して、基本性能や復活回数をアップグレードし、より高い階層を目指せ。',
+        meta: 'TARGET: PERMANENT_STATS',
+        action: () => showTowerMetaHack()
     }
+};
+
+let selectedMode = 'normal';
+
+function selectMode(mode) {
+    selectedMode = mode;
+    const data = modeData[mode];
     
-    const btnMeta = document.getElementById('nav-tower-hacking');
-    if (btnMeta) {
-        btnMeta.onclick = showTowerMetaHack;
-    }
-});
+    // UI更新
+    document.getElementById('selected-mode-title').textContent = data.title;
+    document.getElementById('selected-mode-desc').textContent = data.desc;
+    document.getElementById('selected-mode-meta').textContent = data.meta;
+    
+    // アクティブクラスの切り替え
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.toggle('active', item.getAttribute('data-mode') === mode);
+    });
+    
+    // スタートボタンの表示
+    const startBtn = document.getElementById('execute-start-btn');
+    startBtn.classList.remove('hidden');
+    startBtn.onclick = data.action;
+}
 // renderHackConsoleの最後に呼ぶように修正
 
 function openHackingScreen() {
@@ -2164,11 +2213,7 @@ if (isMobile) {
 // --- 5. UI設定 & 操作 ---
 // Loadout/Collection logic removed
 
-const navStart = document.getElementById('nav-start');
-const navStartEasy = document.getElementById('nav-start-easy');
-
-if (navStart) navStart.onclick = () => { isEasyMode = false; startGame(); };
-if (navStartEasy) navStartEasy.onclick = () => { isEasyMode = true; startGame(); };
+// 旧スタートボタンのリスナーは selectMode 内で管理されるため削除
 
 document.getElementById('retry-button').onclick = startGame;
 document.getElementById('back-home-button').onclick = backToHome;

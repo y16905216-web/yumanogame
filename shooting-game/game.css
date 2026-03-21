@@ -82,55 +82,104 @@ canvas {
     padding: 20px;
 }
 
-#title-logo {
-    font-size: clamp(1.5rem, 8vw, 2.5rem);
+#home-screen {
+    justify-content: flex-start;
+    padding-top: 5vh;
+    background: radial-gradient(circle at center, rgba(0, 40, 20, 0.4) 0%, #000 70%);
+}
+
+#home-main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.stats-overview {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 40px;
+    font-size: 0.9rem;
+}
+
+#best-time, .bit-count-display {
+    border: 1px solid rgba(0, 255, 65, 0.3);
+    padding: 5px 15px;
+    background: rgba(0, 40, 0, 0.2);
+    border-radius: 20px;
+}
+
+#mode-selection-panel {
+    width: 90%;
+    max-width: 500px;
+    background: rgba(0, 20, 10, 0.6);
+    border: 1px solid #00ff41;
+    padding: 30px;
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 40px rgba(0, 255, 65, 0.1);
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#selected-mode-title {
+    font-size: 1.5rem;
     font-weight: bold;
-    margin-bottom: 20px;
-    text-shadow: 0 0 10px #00ff41;
-    letter-spacing: -1px;
+    color: #0ff;
+    margin-bottom: 15px;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+}
+
+#selected-mode-desc {
+    font-size: 0.85rem;
+    line-height: 1.6;
     color: #00ff41;
-    /* animation: glitch 3s infinite; // REMOVED */
 }
 
-@keyframes glitch {
-    0% {
-        transform: translate(0);
-    }
-
-    1% {
-        transform: translate(-2px, 2px);
-        text-shadow: 2px 0 #f0f, -2px 0 #0ff;
-    }
-
-    2% {
-        transform: translate(2px, -2px);
-        text-shadow: -2px 0 #f0f, 2px 0 #0ff;
-    }
-
-    3% {
-        transform: translate(0);
-        text-shadow: none;
-    }
-
-    98% {
-        transform: translate(0);
-    }
-
-    99% {
-        transform: translate(-1px, 1px);
-        border-color: #0ff;
-    }
-
-    100% {
-        transform: translate(0);
-    }
+/* BOTTOM NAV */
+#bottom-nav {
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+    background: rgba(0, 10, 5, 0.95);
+    border-top: 2px solid #00ff41;
+    padding: 10px 0;
+    backdrop-filter: blur(10px);
 }
 
-#title-logo span {
-    display: block;
-    font-size: 0.8rem;
-    color: #008f11;
-    letter-spacing: 2px;
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    padding: 8px 20px;
+    transition: 0.3s;
+    opacity: 0.5;
+    border-radius: 8px;
+}
+
+.nav-item:hover {
+    background: rgba(0, 255, 65, 0.1);
+    opacity: 0.8;
+}
+
+.nav-item.active {
+    opacity: 1;
+    background: rgba(0, 255, 65, 0.2);
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
+}
+
+.nav-icon {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+}
+
+.nav-label {
+    font-size: 0.7rem;
+    font-weight: bold;
 }
 
 .menu-buttons {

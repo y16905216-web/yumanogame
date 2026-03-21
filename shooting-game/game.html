@@ -73,17 +73,42 @@
 
         <!-- HOME SCREEN -->
         <div id="home-screen" class="overlay">
-            <h1 id="title-logo">ハッカー・シューター<span>// システムを初期化中... 権限取得完了</span></h1>
-            <div id="best-time">最長稼働記録: <span id="best-value">00:00</span></div>
-            <div style="margin-top: 5px; color: #00ff41; font-family: monospace;">保有ビット: <span
-                    id="home-bit-count">0</span> BIT</div>
-            <div class="nav-bar" style="display:flex; justify-content:center; gap:10px;">
-                <button id="nav-start" class="btn-primary">開始 [START]</button>
-                <button id="nav-start-easy" class="btn-primary" style="background:#0ff; color:#000;">易開始 [EASY]</button>
-                <button id="nav-start-tower" class="btn-primary" style="background:#f0f; color:#fff;">執念 [TOWER]</button>
+            <div id="home-main-content">
+                <h1 id="title-logo">ハッカー・シューター<span>// SYSTEM_CONNECTED: ACCESS_GRANTED</span></h1>
+                
+                <div class="stats-overview">
+                    <div id="best-time">RECORD: <span id="best-value">00:00</span></div>
+                    <div class="bit-count-display">BIT: <span id="home-bit-count">0</span> BIT</div>
+                </div>
+
+                <div id="mode-selection-panel">
+                    <div id="mode-info-display">
+                        <div id="selected-mode-title">SELECT_MODE</div>
+                        <div id="selected-mode-desc">下のメニューからモードを選択してください。</div>
+                        <div id="selected-mode-meta" style="font-size: 0.55rem; color: #008f11; margin-top: 10px; font-family: monospace;"></div>
+                    </div>
+                    
+                    <button id="execute-start-btn" class="btn-primary hidden" style="margin-top:20px; width:200px; background:#00ff41; color:#000; font-weight:bold; font-size:1.2rem; box-shadow:0 0 20px rgba(0,255,65,0.4);">[ EXECUTE ]</button>
+                </div>
             </div>
-            <div style="margin-top:10px;">
-                <button id="nav-tower-hacking" class="btn-primary" style="font-size:0.6rem; padding:5px 10px;">永続強化 [META_HACK]</button>
+
+            <div id="bottom-nav">
+                <div class="nav-item active" data-mode="normal">
+                    <div class="nav-icon">⚡</div>
+                    <div class="nav-label">STANDARD</div>
+                </div>
+                <div class="nav-item" data-mode="easy">
+                    <div class="nav-icon">🛡️</div>
+                    <div class="nav-label">EASY</div>
+                </div>
+                <div class="nav-item" data-mode="tower">
+                    <div class="nav-icon">🗼</div>
+                    <div class="nav-label">TOWER</div>
+                </div>
+                <div class="nav-item" data-mode="metahack">
+                    <div class="nav-icon">⚙️</div>
+                    <div class="nav-label">META_HACK</div>
+                </div>
             </div>
         </div>
 
