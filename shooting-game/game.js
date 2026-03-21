@@ -957,6 +957,9 @@ function showTowerFloorSelect() {
         for (let i = 1; i <= 30; i++) {
             const dot = document.createElement('div');
             dot.className = 'tower-dot';
+            if (i % 10 === 0 || i === 30) dot.classList.add('boss');
+            if (i % 5 === 0 && i % 10 !== 0) dot.classList.add('shop');
+            
             if (i < towerState.currentFloor) dot.classList.add('cleared');
             if (i === towerState.currentFloor) dot.classList.add('active');
             dot.setAttribute('data-floor', `F${i.toString().padStart(2, '0')}`);
@@ -967,6 +970,22 @@ function showTowerFloorSelect() {
                 }, 100);
             }
         }
+    }
+
+    // Reroll ボタンの設定
+    const rerollBtn = document.getElementById('tower-reroll-btn');
+    if (rerollBtn) {
+        rerollBtn.onclick = () => {
+            if (playerBits >= 500) {
+                playerBits -= 500;
+                updateUI();
+                saveGameState();
+                addLog("!! SYSTEM_RECALIBRATED: OPTIONS_REFRESHED", "hack");
+                showTowerFloorSelect(); // 再描画
+            } else {
+                addLog("!! INSUFFICIENT_BITS", "error");
+            }
+        };
     }
 
     towerState.floorOptions = TowerManager.generateFloors();
@@ -3223,8 +3242,8 @@ function draw() {
     if (isTowerMode && towerState.currentTrouble === 'darkness') {
         ctx.save();
         ctx.beginPath();
-        // 自機周りだけ円形にくり抜く
-        ctx.arc(player.x, player.y, 120, 0, Math.PI * 2);
+        // 自機周りだけ円形にくり抜く (120 -> 220 に拡大)
+        ctx.arc(player.x, player.y, 220, 0, Math.PI * 2);
         ctx.clip();
     }
 

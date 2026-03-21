@@ -940,47 +940,114 @@ button:hover::after {
 
 .tower-progress-sidebar {
     display: flex;
-    flex-direction: column-reverse; /* 下から1F */
-    gap: 4px;
-    background: rgba(0,0,0,0.5);
-    padding: 10px;
-    border: 1px solid #444;
-    border-radius: 4px;
-    height: 350px;
+    flex-direction: column-reverse; /* 下から1, 2, 3... */
+    gap: 8px;
+    padding: 15px;
+    background: rgba(0, 40, 60, 0.4);
+    border: 1px solid rgba(0, 255, 255, 0.5);
+    border-radius: 12px;
+    height: 380px; 
     overflow-y: auto;
+    position: relative;
+    box-shadow: inset 0 0 20px rgba(0, 255, 255, 0.1);
+    scrollbar-width: thin;
+}
+
+.tower-progress-sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.tower-progress-sidebar::-webkit-scrollbar-thumb {
+    background: #0ff;
+    border-radius: 2px;
 }
 
 .tower-dot {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #555;
     border-radius: 50%;
-    background: #222;
-    border: 1px solid #444;
     position: relative;
-}
-
-.tower-dot.active {
-    background: #f0f;
-    box-shadow: 0 0 8px #f0f;
-    border-color: #fff;
-}
-
-.tower-dot.cleared {
-    background: #00ff41;
+    flex-shrink: 0;
+    transition: 0.3s;
+    background: #111;
 }
 
 .tower-dot::after {
     content: attr(data-floor);
     position: absolute;
     left: 20px;
-    top: -2px;
-    font-size: 0.6rem;
-    color: #666;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.65rem;
+    color: #888;
+    white-space: nowrap;
+}
+
+.tower-dot.cleared {
+    background: #0ff;
+    border-color: #0ff;
+    box-shadow: 0 0 10px #0ff;
+}
+
+.tower-dot.cleared::after {
+    color: #0ff;
+}
+
+.tower-dot.active {
+    background: #f0f;
+    border-color: #f0f;
+    box-shadow: 0 0 15px #f0f;
+    transform: scale(1.2);
+    animation: pulseActive 1.5s infinite alternate;
 }
 
 .tower-dot.active::after {
-    color: #fff;
+    color: #f0f;
     font-weight: bold;
+    text-shadow: 0 0 5px #f0f;
+}
+
+.tower-dot.boss {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border-color: #f33;
+    background: rgba(255, 0, 0, 0.2);
+}
+
+.tower-dot.boss.cleared {
+    background: #f33;
+    box-shadow: 0 0 12px #f33;
+}
+
+.tower-dot.shop {
+    border-radius: 2px;
+    border-color: #ff0;
+    background: rgba(255, 255, 0, 0.2);
+}
+
+.tower-dot.shop.cleared {
+    background: #ff0;
+    box-shadow: 0 0 10px #ff0;
+}
+
+@keyframes pulseActive {
+    from { box-shadow: 0 0 5px #f0f; opacity: 0.8; }
+    to { box-shadow: 0 0 20px #f0f; opacity: 1; }
+}
+
+#tower-reroll-btn {
+    transition: 0.3s;
+}
+
+#tower-reroll-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(255, 0, 255, 0.6);
+}
+
+#tower-reroll-btn:active {
+    transform: scale(0.95);
 }
 
 .floor-card {
