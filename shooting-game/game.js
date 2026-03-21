@@ -169,8 +169,12 @@ for (let i = 0; i < 30; i++) {
 
 // --- 3. 入力操作 ---
 const keys = {};
+let isPaused = false;
 window.addEventListener('keydown', e => {
     keys[e.key] = true;
+    if ((e.key === 'p' || e.key === 'P' || e.key === 'Escape') && gameActive && !gameOver && !isHacking) {
+        isPaused = !isPaused;
+    }
 });
 window.addEventListener('keyup', e => keys[e.key] = false);
 
@@ -1383,6 +1387,9 @@ class Enemy {
         this.y = -20;
 
         let baseHp = 1 + Math.floor(playerPowerLevel * 0.8);
+        if (bossesDefeated >= 1) {
+            baseHp = Math.max(3, baseHp); // 1体目のボス撃破後は最低でも弾3発分の体力に
+        }
         this.speed = 2 + Math.random() * 2;
         this.color = '#0ff';
         this.type = 'normal';
@@ -1855,6 +1862,13 @@ document.querySelectorAll('.close-modal').forEach(b => b.onclick = () => {
 function update() {
     if (!gameActive || gameOver || isHacking) return;
     const now = Date.now();
+
+    if (isPaused) {
+        // ポーズ中は経過時間が進まないように開始時間をずらす
+        startTime += (now - (lastTime || now));
+        lastTime = now;
+        return;
+    }
 
     // 接触フラグリセット
     contactFlags.player = false;
@@ -2766,6 +2780,21 @@ function showGameOver() {
 function loop() {
     update();
     draw();
+    if (isPaused && gameActive && !gameOver && !isHacking) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0ff';
+        ctx.font = 'bold 40px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#0ff';
+        ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2 - 10);
+        ctx.font = '16px "Courier New", monospace';
+        ctx.fillText('Press [P] or [ESC] to Resume', canvas.width / 2, canvas.height / 2 + 30);
+        ctx.restore();
+    }
     requestAnimationFrame(loop);
 }
 
