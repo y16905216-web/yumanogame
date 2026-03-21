@@ -134,7 +134,7 @@ let hackingStack = [];
 let activeLoadout = JSON.parse(localStorage.getItem('hacker_shooter_loadout')) || []; // 編成セット
 const MAX_LOADOUT_SIZE = 20;
 const MAX_STACK_ACTIONS = 5;
-const MAX_HACK_MEMORY = 450; // MB (Fine-tuned from 300)
+const MAX_HACK_MEMORY = 400; // MB
 let currentHackMemory = 0;
 
 // 編成の初期化 (空ならスターターを入れる)
@@ -1752,6 +1752,8 @@ function startGame() {
     bossesDefeated = 0;
     nextBossScore = 60;
     player.bossTimeElapsed = 0;
+    playerPowerLevel = 0;
+    currentHackMemory = 0;
 
     // システムビット初期化 (セッション毎に800にリセット)
     playerBits = 800;
