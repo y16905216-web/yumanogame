@@ -1381,17 +1381,61 @@ class Enemy {
     constructor() {
         this.x = Math.random() * (canvas.width - 40) + 20;
         this.y = -20;
+
         let baseHp = 1 + Math.floor(playerPowerLevel * 0.8);
-        this.hp = baseHp;
-        this.maxHp = baseHp;
-        this.color = '#0ff';
         this.speed = 2 + Math.random() * 2;
+        this.color = '#0ff';
+        this.type = 'normal';
+        this.w = 30;
+        this.h = 30;
+
+        // ボス撃破進行に応じた敵バリエーション
+        if (bossesDefeated === 0) {
+            this.hp = baseHp;
+        } else if (bossesDefeated === 1) {
+            let rand = Math.random();
+            if (rand < 0.4) {
+                this.hp = baseHp * 4;       // タンク
+                this.speed *= 0.5;
+                this.color = '#f80';
+                this.type = 'tank';
+            } else {
+                this.hp = baseHp * 1.5;     // スピード
+                this.speed *= 1.8;
+                this.color = '#ff0';
+                this.type = 'speed';
+            }
+        } else {
+            let rand = Math.random();
+            if (rand < 0.3) {
+                this.hp = baseHp * 6;       // スーパータンク
+                this.speed *= 0.6;
+                this.color = '#f80';
+                this.type = 'tank';
+            } else if (rand < 0.6) {
+                this.hp = baseHp * 2.5;     // 特攻スピード
+                this.speed *= 2.5;
+                this.color = '#ff0';
+                this.type = 'speed';
+            } else {
+                this.hp = baseHp * 3;       // シューター
+                this.speed *= 0.8;
+                this.color = '#f0f';
+                this.type = 'shooter';
+                this.fireTimer = Math.random() * 60;
+            }
+        }
+
+        // 全体難易度の底上げ
+        this.hp = Math.ceil(this.hp * (1 + bossesDefeated * 0.5));
+        this.maxHp = this.hp;
+
         this.angle = 0;
         this.freezeTimer = 0;
         this.poisonTimer = 0;
         this.staticFieldTimer = 0;
-        this.vulnerableTimer = 0; // Echo Sonar debuff
-        this.noiseLevel = 0;      // Malware Stack
+        this.vulnerableTimer = 0;
+        this.noiseLevel = 0;
         this.isSelfDestruct = false;
     }
     update(speedMult) {
@@ -1436,6 +1480,20 @@ class Enemy {
             this.hp -= 0.1;
         }
 
+        // Shooterの射撃アクション
+        if (this.type === 'shooter' && !player.isTimeStopped) {
+            this.fireTimer--;
+            if (this.fireTimer <= 0) {
+                const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                enemyBullets.push({
+                    x: this.x, y: this.y,
+                    vx: Math.cos(angle) * 5, vy: Math.sin(angle) * 5,
+                    color: '#f0f', size: 1.0, life: 100
+                });
+                this.fireTimer = 100 + Math.random() * 60;
+            }
+        }
+
         this.y += this.speed * speedMult;
         this.angle += 0.05 * speedMult;
 
@@ -1478,13 +1536,32 @@ class Enemy {
 
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(-15, -15); ctx.lineTo(15, -15);
-        ctx.lineTo(15, 15); ctx.lineTo(-15, 15);
+
+        // 敵タイプ別の描画形状
+        if (this.type === 'tank') {
+            ctx.lineWidth = 3;
+            ctx.arc(0, 0, 16, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 136, 0, 0.3)';
+        } else if (this.type === 'speed') {
+            ctx.moveTo(0, 15);
+            ctx.lineTo(12, -12);
+            ctx.lineTo(-12, -12);
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+        } else if (this.type === 'shooter') {
+            ctx.moveTo(-15, -12);
+            ctx.lineTo(15, -12);
+            ctx.lineTo(0, 15);
+            ctx.fillStyle = 'rgba(255, 0, 255, 0.3)';
+        } else {
+            ctx.moveTo(0, -16);
+            ctx.lineTo(16, 0);
+            ctx.lineTo(0, 16);
+            ctx.lineTo(-16, 0);
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
+        }
         ctx.closePath();
         ctx.stroke();
-
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
-        ctx.fillRect(-10, -10, 20, 20);
+        ctx.fill();
 
         // Malware Noise
         if (this.noiseLevel > 0) {
@@ -1887,16 +1964,16 @@ function update() {
         }
     }
 
-    // 敵スポーン (プレイヤーのパワーに応じて敵増加) - バランス調整: 増加量を大幅アップ
-    const dynamicSpawnRate = ENEMY_SPAWN_RATE * (1 + playerPowerLevel * 1.5); // 150% increase per level
+    // 敵スポーン (難易度大幅アップ: レベルとボス撃破数で相乗効果)
+    const dynamicSpawnRate = ENEMY_SPAWN_RATE * (1 + playerPowerLevel * 2.0) * (1 + bossesDefeated * 0.8);
     if (Math.random() < dynamicSpawnRate) {
         enemies.push(new Enemy());
     }
 
-    // Bossスポーン (Buffed HP)
+    // Bossスポーン (Buffed HP & Scaling)
     if (score >= nextBossScore && bossesDefeated < 3 && !enemies.some(e => e.isBoss)) {
-        // Boss Spawn (HP scaled with playerPowerLevel)
-        let hpMultiplier = 1 + playerPowerLevel * 0.5;
+        // Boss Spawn (HP scaled with playerPowerLevel and loops)
+        let hpMultiplier = (1 + playerPowerLevel * 0.8) * (1 + bossesDefeated * 0.5);
         let hp = 200 * hpMultiplier; // Boss 1 
         if (bossesDefeated === 1) hp = 400 * hpMultiplier; // Boss 2
         if (bossesDefeated === 2) hp = 800 * hpMultiplier; // Boss 3
