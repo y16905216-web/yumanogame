@@ -170,6 +170,7 @@ for (let i = 0; i < 30; i++) {
 // --- 3. 入力操作 ---
 const keys = {};
 let isPaused = false;
+let isEasyMode = false;
 window.addEventListener('keydown', e => {
     keys[e.key] = true;
     if ((e.key === 'p' || e.key === 'P' || e.key === 'Escape') && gameActive && !gameOver && !isHacking) {
@@ -1770,7 +1771,7 @@ function startGame() {
     player.bossTimeElapsed = 0;
     playerPowerLevel = 0;
     currentHackMemory = 0;
-    MAX_HACK_MEMORY = 400;
+    MAX_HACK_MEMORY = isEasyMode ? 99999 : 400; // イージーモード時は無制限
 
     // システムビット初期化 (セッション毎に800にリセット)
     playerBits = 800;
@@ -1835,7 +1836,10 @@ if (isMobile) {
 // Loadout/Collection logic removed
 
 const navStart = document.getElementById('nav-start');
-if (navStart) navStart.onclick = startGame;
+const navStartEasy = document.getElementById('nav-start-easy');
+
+if (navStart) navStart.onclick = () => { isEasyMode = false; startGame(); };
+if (navStartEasy) navStartEasy.onclick = () => { isEasyMode = true; startGame(); };
 
 document.getElementById('retry-button').onclick = startGame;
 document.getElementById('back-home-button').onclick = backToHome;
@@ -1997,6 +2001,9 @@ function update() {
     if (score >= nextBossScore && bossesDefeated < 3 && !enemies.some(e => e.isBoss)) {
         // Boss Spawn (HP scaled with playerPowerLevel and loops)
         let hpMultiplier = (1 + playerPowerLevel * 0.8) * (1 + bossesDefeated * 0.5);
+        if (isEasyMode) {
+            hpMultiplier *= 0.2; // イージーモード時はボスの体力を劇的に減らす (20%)
+        }
         let hp = 200 * hpMultiplier; // Boss 1 
         if (bossesDefeated === 1) hp = 400 * hpMultiplier; // Boss 2
         if (bossesDefeated === 2) hp = 800 * hpMultiplier; // Boss 3
