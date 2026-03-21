@@ -213,6 +213,11 @@ class TowerManager {
         score = 0;
         startTime = Date.now();
         
+        // モジュールとステータスの同期
+        player.activeModules = JSON.parse(JSON.stringify(hackingStack));
+        applyStaticStats();
+        applyDynamicLogic();
+        
         // トラブルフロア演出
         if (towerState.currentTrouble === 'darkness') {
             addLog("!! WARNING: VISUAL_SENSOR_FAILURE (暗晦状態)", "error");
@@ -954,12 +959,16 @@ function showTowerAssembleScreen() {
                 hackingStack.push({ id: block.id, level: 1, param: null, condId: 'cond-always', actionId: block.id });
             }
         }
-        towerState.pendingReward = null;
     }
+    towerState.pendingReward = null;
     
-    // 既存のハッキング画面を流用
-    openHackingScreen();
-    addLog(`FLOOR_${towerState.currentFloor-1}_CLEAR: チップをアセンブルしてください`, "hack");
+    // ハッキング画面を出さずに、自動でステータスを更新してフロア選択へ
+    applyStaticStats();
+    applyDynamicLogic();
+    updateUI();
+    
+    showTowerFloorSelect();
+    addLog(`FLOOR_${towerState.currentFloor-1}_CLEAR: システムをアップグレードしました`, "hack");
 }
 
 function showTowerMetaHack() {
@@ -1794,7 +1803,8 @@ class Enemy {
         }
 
         // 全体難易度の底上げ
-        this.hp = Math.ceil(this.hp * (1 + bossesDefeated * 0.5));
+        const floorHPMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.1) : 1.0;
+        this.hp = Math.ceil(this.hp * (1 + bossesDefeated * 0.5) * floorHPMult);
         this.maxHp = this.hp;
 
         this.angle = 0;
@@ -1958,6 +1968,10 @@ class Enemy {
         ctx.restore();
     }
     die() {
+        if (this.isBoss && isTowerMode) {
+            gameClear();
+            return;
+        }
         createExplosion(this.x, this.y, this.isShrink ? '#088' : '#0ff', 15);
         if (player.hasFireworks) {
             const colors = ['#f00', '#ff0', '#0ff', '#f0f', '#fff'];
@@ -2319,8 +2333,8 @@ function update() {
         player.lastFireTime = now; // Prevent firing
     }
 
-    // Sキー: ハッキング
-    if (keys['s'] || keys['S']) {
+    // Sキー: ハッキング (タワーモードでは戦闘中不可)
+    if ((keys['s'] || keys['S']) && !isTowerMode) {
         if (hackGauge >= 100 && !isHacking) {
             openHackingScreen();
         }
@@ -2339,13 +2353,16 @@ function update() {
     }
 
     // 敵スポーン (難易度大幅アップ: レベルとボス撃破数で相乗効果)
-    const dynamicSpawnRate = ENEMY_SPAWN_RATE * (1 + playerPowerLevel * 2.0) * (1 + bossesDefeated * 0.8);
+    const towerSpawnMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.05) : 1.0;
+    const dynamicSpawnRate = ENEMY_SPAWN_RATE * (1 + playerPowerLevel * 2.0) * (1 + bossesDefeated * 0.8) * towerSpawnMult;
     if (Math.random() < dynamicSpawnRate) {
         enemies.push(new Enemy());
     }
 
-    // Bossスポーン
-    if (score >= nextBossScore && bossesDefeated < 3 && !enemies.some(e => e.isBoss)) {
+    // ボス出現
+    const bossSpawnThreshold = isTowerMode ? 15 : nextBossScore;
+    const maxBosses = isTowerMode ? 1 : 3;
+    if (score >= bossSpawnThreshold && bossesDefeated < maxBosses && !enemies.some(e => e.isBoss)) {
         const hpMultiplier = (1 + playerPowerLevel * 0.8) * (1 + bossesDefeated * 0.5);
         let bossHp = 200 * hpMultiplier; // Boss 1
         if (bossesDefeated === 1) bossHp = 400 * hpMultiplier; // Boss 2
