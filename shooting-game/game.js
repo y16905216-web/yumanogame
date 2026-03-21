@@ -7,7 +7,7 @@ canvas.height = 540;
 // --- 1. 定数・初期設定 ---
 const MAX_HP = 100;
 const PLAYER_SPEED = 5;
-const ENEMY_SPAWN_RATE = 0.06;
+const ENEMY_SPAWN_RATE = 0.04;
 const HACK_DURATION = 5000;
 const CLEAR_TIME = 180; // 3分でゴール到達
 
@@ -1390,8 +1390,20 @@ function gameClear() {
 
 class Enemy {
     constructor() {
-        this.x = Math.random() * (canvas.width - 40) + 20;
-        this.y = -20;
+        const side = Math.floor(Math.random() * 4);
+        if (side === 0) { // Top
+            this.x = Math.random() * (canvas.width - 40) + 20;
+            this.y = -20;
+        } else if (side === 1) { // Bottom
+            this.x = Math.random() * (canvas.width - 40) + 20;
+            this.y = canvas.height + 20;
+        } else if (side === 2) { // Left
+            this.x = -20;
+            this.y = Math.random() * (canvas.height - 40) + 20;
+        } else { // Right
+            this.x = canvas.width + 20;
+            this.y = Math.random() * (canvas.height - 40) + 20;
+        }
 
         let baseHp = 1 + Math.floor(playerPowerLevel * 0.8);
         if (bossesDefeated >= 1) {
@@ -1508,7 +1520,17 @@ class Enemy {
             }
         }
 
-        this.y += this.speed * speedMult;
+        // プレイヤーの方向へ向かう
+        const targetObj = decoys.length > 0 ? decoys[0] : player;
+        const dx = targetObj.x - this.x;
+        const dy = targetObj.y - this.y;
+        const dist = Math.hypot(dx, dy);
+        
+        if (dist > 0) {
+            this.x += (dx / dist) * this.speed * speedMult;
+            this.y += (dy / dist) * this.speed * speedMult;
+        }
+        
         this.angle += 0.05 * speedMult;
 
         // 全てのブラックホールに吸い寄せられる
@@ -2507,16 +2529,8 @@ function updateEnemies() {
         let speedMult = player.isTimeStopped ? 0 : (player.isSlowMotion ? 0.5 : 1);
         if (e.isShrink) speedMult *= 0.6;
         e.update(speedMult);
-        if (e.y > canvas.height + 50) return false;
+        if (e.x < -200 || e.x > canvas.width + 200 || e.y < -200 || e.y > canvas.height + 200) return false;
 
-        // ターゲット (デコイがいれば優先)
-        const targetObj = decoys.length > 0 ? decoys[0] : player;
-        if (decoys.length > 0) {
-            const dx = targetObj.x - e.x;
-            const dy = targetObj.y - e.y;
-            const dist = Math.hypot(dx, dy);
-            e.x += (dx / dist) * 1.0;
-        }
 
         // 自機衝突
         if (Math.hypot(e.x - player.x, e.y - player.y) < 15 * player.hitboxSizeMult + 15) {
@@ -2633,47 +2647,57 @@ function draw() {
         ctx.globalAlpha = Math.sin(Date.now() / 50) * 0.5 + 0.5;
     }
 
-    // メインボディ
-    ctx.fillStyle = '#1a1a1a';
+    // --- ここから戦車デザイン ---
+    // 車体 (シャーシ)
+    ctx.fillStyle = '#113311'; // 深緑の装甲
     ctx.strokeStyle = '#00ff41';
     ctx.lineWidth = 2;
+    ctx.fillRect(-15, -20, 30, 40);
+    ctx.strokeRect(-15, -20, 30, 40);
+
+    // 履帯 (キャタピラ)
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-22, -22, 7, 44);
+    ctx.fillRect(15, -22, 7, 44);
+    ctx.strokeRect(-22, -22, 7, 44);
+    ctx.strokeRect(15, -22, 7, 44);
+
+    // 砲塔の回転 (砲身の向き)
+    let targetX = mouseX, targetY = mouseY;
+    if (player.autoFire) {
+        let nearestEnemy = null; let minDist = Infinity;
+        enemies.forEach(e => {
+            const d = Math.hypot(e.x - player.x, e.y - player.y);
+            if (d < minDist) { minDist = d; nearestEnemy = e; }
+        });
+        if (nearestEnemy) { targetX = nearestEnemy.x; targetY = nearestEnemy.y; }
+    }
+    const aimAngle = Math.atan2(targetY - player.y, targetX - player.x);
+
+    ctx.save();
+    ctx.rotate(aimAngle);
+
+    // 砲身
+    ctx.fillStyle = '#0a220a';
+    ctx.fillRect(0, -4, 25, 8);
+    ctx.strokeRect(0, -4, 25, 8);
+
+    // 砲塔ベース (円形)
     ctx.beginPath();
-    ctx.moveTo(0, -20);
-    ctx.lineTo(12, 10);
-    ctx.lineTo(0, 5);
-    ctx.lineTo(-12, 10);
-    ctx.closePath();
+    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a4a1a';
     ctx.fill();
     ctx.stroke();
 
-    // ウィング
-    ctx.fillStyle = '#333';
-    ctx.fillRect(-18, 0, 6, 12);
-    ctx.fillRect(12, 0, 6, 12);
-    ctx.strokeStyle = '#00ff41';
-    ctx.strokeRect(-18, 0, 6, 12);
-    ctx.strokeRect(12, 0, 6, 12);
-
-    // コア
+    // コア (光る部分)
     ctx.beginPath();
     ctx.arc(0, 0, 4, 0, Math.PI * 2);
     ctx.fillStyle = '#0ff';
-    // ctx.shadowBlur = 10;
-    // ctx.shadowColor = '#0ff';
     ctx.fill();
-    // ctx.shadowBlur = 0;
 
-    // スラスター
-    if (gameActive && !player.isTimeStopped) {
-        ctx.fillStyle = `rgba(255, 100, 0, ${0.5 + Math.random() * 0.5})`;
-        const th = 8 + Math.random() * 10;
-        ctx.beginPath();
-        ctx.moveTo(-4, 8);
-        ctx.lineTo(0, 8 + th);
-        ctx.lineTo(4, 8);
-        ctx.fill();
-    }
     ctx.restore();
+    ctx.restore();
+
 
     // バリア描画
     if (player.barrierTimer > 0) {
