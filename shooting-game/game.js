@@ -188,10 +188,10 @@ class TowerManager {
             const rewardPool = BLOCKS.filter(b => b.isTowerChip);
             const rewardBlock = rewardPool[Math.floor(Math.random() * rewardPool.length)];
             
-            // 難易度別のビット報酬
-            let rewardBits = 100;
-            if (diff === 'NORMAL') rewardBits = 250;
-            if (diff === 'HARD') rewardBits = 500;
+            // 難易度別のビット報酬 (上方調整)
+            let rewardBits = 200;
+            if (diff === 'NORMAL') rewardBits = 500;
+            if (diff === 'HARD') rewardBits = 1000;
 
             options.push({
                 type: 'battle',
@@ -1368,6 +1368,14 @@ function applyStaticStats() {
     player.bulletToCoin = false;
     player.corpseExplosion = false;
     player.isSlowMotion = false;
+    player.disarmedTimer = 0; // 必須：弾が出ない原因の修正
+    player.invincibleTimer = 0;
+    player.isInvincible = false;
+    player.isTimeStopped = false;
+    player.barrierTimer = 0;
+    player.chargeLevel = 0;
+    player.lastSkillTime = 0;
+    player.bossTimeElapsed = 0;
     player.hasEndurance = false;
     player.autoFire = false;
     player.subShips = 0;
@@ -1897,7 +1905,7 @@ class Enemy {
         }
 
         // 全体難易度の底上げ
-        const floorHPMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.1) : 1.0;
+        const floorHPMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.05) : 1.0; // 0.06 -> 0.05 (更なる緩和)
         this.hp = Math.ceil(this.hp * (1 + bossesDefeated * 0.5) * floorHPMult);
         this.maxHp = this.hp;
 
@@ -2444,7 +2452,7 @@ function update() {
     }
 
     // 敵スポーン (難易度大幅アップ: レベルとボス撃破数で相乗効果)
-    const towerSpawnMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.05) : 1.0;
+    const towerSpawnMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.02) : 1.0; // 0.03 -> 0.02 (更なる緩和)
     const dynamicSpawnRate = ENEMY_SPAWN_RATE * (1 + playerPowerLevel * 2.0) * (1 + bossesDefeated * 0.8) * towerSpawnMult;
     if (Math.random() < dynamicSpawnRate) {
         enemies.push(new Enemy());
