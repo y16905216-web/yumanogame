@@ -19,6 +19,8 @@ let playerBits = parseInt(localStorage.getItem('hacker_shooter_bits')) || 0;
 let startTime = 0;
 let gameOver = false;
 let gameActive = false;
+let isPaused = false;
+let isEasyMode = false;
 let lastTime = Date.now();
 let bulletHitRecently = 0;
 let bitMultiplier = 1;
@@ -133,7 +135,7 @@ Object.keys(starterCounts).forEach(id => {
 let hackingStack = [];
 let activeLoadout = JSON.parse(localStorage.getItem('hacker_shooter_loadout')) || []; // 編成セット
 const MAX_LOADOUT_SIZE = 20;
-const MAX_STACK_ACTIONS = 5;
+let MAX_STACK_ACTIONS = 5;
 let MAX_HACK_MEMORY = 400; // MB
 let currentHackMemory = 0;
 
