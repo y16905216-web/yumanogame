@@ -20,8 +20,8 @@ let startTime = 0;
 let gameOver = false;
 let gameActive = false;
 let lastTime = performance.now();
-let bulletHitRecently = 0; 
-let bitMultiplier = 1;     
+let bulletHitRecently = 0;
+let bitMultiplier = 1;
 let screenShake = 0;
 let playerPowerLevel = 0; // 敵難易度スケーリング用
 let terminalLogs = ["SYSTEM_READY"];
@@ -145,7 +145,7 @@ if (activeLoadout.length === 0) {
 let logs = [];
 let codeRain = [];
 let isHacking = false;
-let slowTimer = 0; 
+let slowTimer = 0;
 
 if (isMobile && document.getElementById('mobile-controls')) {
     document.getElementById('mobile-controls').classList.remove('hidden');
@@ -252,7 +252,7 @@ const BLOCKS = [
     { id: 'num-20', category: CATEGORIES.PARAM, label: '20', value: 20, maxUsage: 10, icon: '📈' },
     { id: 'num-50', category: CATEGORIES.PARAM, label: '50', value: 50, maxUsage: 10, icon: '⏫' },
     { id: 'num-100', category: CATEGORIES.PARAM, label: '100', value: 100, maxUsage: 10, icon: '💯' },
-    
+
     // --- 追加ブロック ---
     { id: 'cond-on-hit', category: CATEGORIES.COND, label: '弾が敵にあたったとき', desc: '命中時に一時的に有効化', icon: '🎯' },
     { id: 'passive-blackhole', category: CATEGORIES.PASSIVE, label: 'ブラックホールを設置する', desc: '敵を吸い寄せ、弾を消去する', icon: '🌀' },
@@ -294,7 +294,7 @@ const BLOCKS = [
     // --- 新規追加アドバンスド・コンボ用 ---
     { id: 'main-drill', category: CATEGORIES.MAIN, label: '[ ドリル ]', desc: '多段ヒットする重い弾', icon: '🔩' },
     { id: 'passive-blood-pact', category: CATEGORIES.PASSIVE, label: '[ 決死の覚悟 ]', desc: 'HPを常時消費し、弾の威力とサイズを3倍にする', icon: '🩸' },
-    
+
     // --- Phase 2: NEW BLOCKS ---
     { id: 'effect-echo', category: CATEGORIES.SKILL, label: '[ 残響 ]', desc: '敵を倒すと衝撃波が発生し、周囲の敵を被ダメージ1.5倍にする', icon: '📡' },
     { id: 'system-binary-trade', category: CATEGORIES.SYSTEM, label: '[ 等価交換 ]', desc: '射撃時にビットを消費。ビットが偶数なら威力UP、奇数なら弾数UP', icon: '⚖️' },
@@ -327,13 +327,13 @@ BLOCKS.forEach(b => {
         else if (b.category === CATEGORIES.NUM) b.maxUsage = 5;
         else b.maxUsage = 1;
     }
-    
+
     b.remainingUsage = b.maxUsage;
 });
 
-const AVAILABLE_CONDITIONS = []; 
-const AVAILABLE_ACTIONS = []; 
-const AVAILABLE_CHARACTERS = []; 
+const AVAILABLE_CONDITIONS = [];
+const AVAILABLE_ACTIONS = [];
+const AVAILABLE_CHARACTERS = [];
 const ALL_ITEMS = BLOCKS;
 
 let currentHackTab = 'main';
@@ -358,7 +358,7 @@ function calculateTotalMemory() {
     hackingStack.forEach(entry => {
         const bMain = BLOCKS.find(b => b.id === entry.id);
         if (bMain) total += bMain.memory;
-        
+
         if (entry.condId) {
             const bCond = BLOCKS.find(b => b.id === entry.condId);
             if (bCond) total += bCond.memory;
@@ -406,7 +406,7 @@ function renderHackConsole() {
         const isOutOfStock = block.remainingUsage <= 0;
         const div = document.createElement('div');
         div.className = `hack-item type-${block.category} ${isOutOfStock ? 'out-of-stock' : ''}`;
-        
+
         let label = block.label.replace(' [ {p} ] ', ' [...] ').replace(' [ {c} ] ', ' [?] ').replace(' [ {a} ] ', ' [!] ');
         if (block.hasObject) label = label.replace('[ {o} ]', ' [?] ');
         div.innerHTML = `
@@ -414,7 +414,7 @@ function renderHackConsole() {
             <span style="margin-left:5px;">${label}</span>
             <div class="item-count">${block.memory}MB | LIFE: ${block.remainingUsage}</div>
         `;
-        
+
         if (!isOutOfStock) {
             div.onclick = () => { handleBlockClick(block); };
             div.ondblclick = () => {
@@ -446,9 +446,9 @@ function renderHackConsole() {
             const blockDef = BLOCKS.find(b => b.id === entry.id);
             const div = document.createElement('div');
             div.className = `hack-item in-slot type-${blockDef.category}`;
-            
+
             let html = blockDef.label;
-            
+
             if (blockDef.hasParam) {
                 const pVal = entry.param !== null ? entry.param : '__';
                 const activeClass = (selectedBlockIndex === index && selectedSlot === 'param') ? 'selected' : '';
@@ -457,7 +457,7 @@ function renderHackConsole() {
             if (blockDef.hasCond) {
                 const cDef = entry.condId ? BLOCKS.find(b => b.id === entry.condId) : null;
                 let cLabel = cDef ? cDef.label : '??';
-                
+
                 if (cDef && cDef.hasObject1) {
                     const oLabel = entry.objectId ? entry.objectId.replace('obj-', '') : '??';
                     const oActiveClass = (selectedBlockIndex === index && selectedSlot === 'object1') ? 'selected' : '';
@@ -505,12 +505,12 @@ function addToStack(block) {
         }
         return;
     }
-    
+
     if (block.remainingUsage <= 0) {
         addLog(`リソース不足: ${block.label}`, 'error');
         return;
     }
-    
+
     // メモリチェック
     if (calculateTotalMemory() + block.memory > MAX_HACK_MEMORY) {
         if (document.getElementById('hacking-error-console')) {
@@ -535,7 +535,7 @@ function handleBlockClick(block) {
     for (let i = 0; i < hackingStack.length; i++) {
         const entry = hackingStack[i];
         const def = BLOCKS.find(b => b.id === entry.id);
-        
+
         const cDef = entry.condId ? BLOCKS.find(b => b.id === entry.condId) : null;
         if (block.category === CATEGORIES.PARAM && block.id.startsWith('obj-') && cDef) {
             if (cDef.hasObject1 && entry.objectId === null) {
@@ -597,7 +597,7 @@ function fillSlot(blockId) {
             return;
         }
         if (block.remainingUsage <= 0) { addLog("リソース不足", "error"); return; }
-        
+
         // メモリチェック
         const currentTotal = calculateTotalMemory();
         const prevMem = entry.condId ? (BLOCKS.find(b => b.id === entry.condId)?.memory || 0) : 0;
@@ -625,7 +625,7 @@ function fillSlot(blockId) {
             return;
         }
         if (block.remainingUsage <= 0) { addLog("リソース不足", "error"); return; }
-        
+
         // メモリチェック
         const currentTotal = calculateTotalMemory();
         const prevMem = entry.actionId ? (BLOCKS.find(b => b.id === entry.actionId)?.memory || 0) : 0;
@@ -647,7 +647,7 @@ function fillSlot(blockId) {
             return;
         }
         if (block.remainingUsage <= 0) { addLog("リソース不足", "error"); return; }
-        
+
         // メモリチェック
         const currentTotal = calculateTotalMemory();
         const prevMem = entry.param !== null ? (BLOCKS.find(b => b.category === CATEGORIES.NUM && b.value === entry.param)?.memory || 0) : 0;
@@ -673,10 +673,10 @@ function fillSlot(blockId) {
             return;
         }
         if (block.remainingUsage <= 0) { addLog("リソース不足", "error"); return; }
-        
+
         const isObj2 = (selectedSlot === 'object2');
         const currentObjectId = isObj2 ? entry.objectId2 : entry.objectId;
-        
+
         const currentTotal = calculateTotalMemory();
         const prevMem = currentObjectId ? (BLOCKS.find(b => b.id === currentObjectId)?.memory || 0) : 0;
         if (currentTotal - prevMem + block.memory > MAX_HACK_MEMORY) {
@@ -689,10 +689,10 @@ function fillSlot(blockId) {
             if (prev) prev.remainingUsage++;
         }
         block.remainingUsage--;
-        
+
         if (isObj2) entry.objectId2 = block.id;
         else entry.objectId = block.id;
-        
+
         // オブジェクト1を埋めた直後、オブジェクト2が空なら自動移行
         if (!isObj2 && entry.objectId2 === null) {
             selectedSlot = 'object2';
@@ -740,16 +740,16 @@ function removeFromStack(index) {
 // renderHackConsoleの最後に呼ぶように修正
 
 function openHackingScreen() {
-    if (isHacking || hackGauge < 100 || gameOver || !gameActive) return;
+    if (isHacking || gameOver || !gameActive) return;
     isHacking = true;
     keys['s'] = false; keys['S'] = false;
-    
+
     // Phase 3: Reset usage counts per session
     BLOCKS.forEach(b => b.remainingUsage = b.maxUsage);
-    
+
     // Persistent Slot Management: Pre-populate with currently active modules
     hackingStack = JSON.parse(JSON.stringify(player.activeModules));
-    
+
     // Adjust usage counts based on what's already in the stack
     hackingStack.forEach(entry => {
         const bMain = BLOCKS.find(b => b.id === entry.id);
@@ -824,10 +824,10 @@ document.getElementById('apply-hack').onclick = () => {
         playerPowerLevel = Math.min(20, player.activeModules.reduce((sum, mod) => {
             return sum + (POWER_WEIGHTS[mod.id] || 0.5);
         }, 0));
-        
+
         // ビット消費倍率の計算 (強くなるほど消費増)
-        player.bitCostMult = 1 + (playerPowerLevel * 0.1); 
-        
+        player.bitCostMult = 1 + (playerPowerLevel * 0.1);
+
         addLog(`⚡ パワーレベル: ${playerPowerLevel.toFixed(1)} / ビット消費: x${player.bitCostMult.toFixed(2)}`, 'hack');
         addLog(`📈 難易度補正: 敵出現率 +${(playerPowerLevel * 150).toFixed(0)}%`, 'hack');
 
@@ -876,15 +876,15 @@ function checkCondition(condId, target = null, objId = null, objId2 = null) {
     }
     if (condId === 'cond-on-touch') {
         if (!objId || !objId2) return false;
-        
+
         const isPair = (t1, t2) => (objId === t1 && objId2 === t2) || (objId === t2 && objId2 === t1);
-        
+
         if (isPair('obj-player', 'obj-enemy')) return contactFlags.enemy;
         if (isPair('obj-player', 'obj-bit')) return contactFlags.bit;
         if (isPair('obj-player', 'obj-bullet')) return contactFlags.bullet;
         if (isPair('obj-player', 'obj-blackhole')) return contactFlags.blackhole;
         if (isPair('obj-bullet', 'obj-enemy')) return bulletHitRecently > 0 || (target && target.justHit);
-        
+
         // フォールバック
         return false;
     }
@@ -997,11 +997,11 @@ function applyActionEffect(actionId, p, target = null) {
         case 'main-laser': obj.isLaser = true; break;
         case 'main-bomb': obj.isBomb = true; break;
         case 'main-rear': player.isRearShot = true; break;
-        case 'main-speed': 
+        case 'main-speed':
             if (target) { target.vx *= 1.2; target.vy *= 1.2; }
             else player.bulletSpeedMult *= (1 + (p || 10) / 100); // 乗算スタック
             break;
-        case 'main-size': 
+        case 'main-size':
             if (target) target.size *= 1.5;
             else player.bulletSizeMult *= (1 + (p || 10) / 100); // 乗算スタック
             break;
@@ -1070,7 +1070,7 @@ function applyActionEffect(actionId, p, target = null) {
                 if (['skill-turret', 'skill-decoy', 'skill-blade', 'skill-portal'].includes(actionId)) {
                     player[actionId.replace('skill-', 'has')] = true;
                 }
-                
+
                 // 自動/手動発動
                 if (!player.skillCooldowns[actionId] || now - player.skillCooldowns[actionId] > 1000) {
                     triggerSkill(actionId, p);
@@ -1142,15 +1142,17 @@ function takeDamage(amt) {
         // バリア被弾: 镜面に回りの山を作る
         if (player.barrierTimer > 0) {
             enemyBullets.filter(eb => Math.hypot(eb.x - player.x, eb.y - player.y) < 100).forEach(eb => {
-                bullets.push({ x: eb.x, y: eb.y, vx: -eb.vx * 1.5, vy: -eb.vy * 1.5,
+                bullets.push({
+                    x: eb.x, y: eb.y, vx: -eb.vx * 1.5, vy: -eb.vy * 1.5,
                     color: '#0ff', size: 1.0, life: 120, time: 0, hitEnemies: new Map(),
-                    isExplosion: player.isExplosion });
+                    isExplosion: player.isExplosion
+                });
             });
             enemyBullets = enemyBullets.filter(eb => Math.hypot(eb.x - player.x, eb.y - player.y) >= 100);
         }
         return;
     }
-    
+
     // 耐忍コンボ: HP1れぞ特殊発動
     if (player.hasEndurance && hp - amt <= 0 && hp > 1) {
         hp = 1;
@@ -1162,7 +1164,7 @@ function takeDamage(amt) {
         setTimeout(() => { player.isInvincible = false; }, 2000);
         return;
     }
-    
+
     hp -= amt;
     // screenShake = 15; // REMOVED
     if (hp <= 0) {
@@ -1192,7 +1194,7 @@ function createExplosion(x, y, color, count) {
 
 function createLightning(x, y, chainLimit = 5, excludedEnemies = new Set()) {
     createExplosion(x, y, '#fff', 15);
-    
+
     // 範囲ダメージ (直撃)
     enemies.forEach(e => {
         const d = Math.hypot(e.x - x, e.y - y);
@@ -1284,11 +1286,11 @@ class Bit {
         const dx = player.x - this.x;
         const dy = player.y - this.y;
         const dist = Math.hypot(dx, dy);
-        if (dist < 30) { 
+        if (dist < 30) {
             playerBits += 1; // 低下 (10 -> 5)
             contactFlags.bit = true;
             updateUI();
-            return true; 
+            return true;
         }
         if (dist < 200 || player.isMagnet) {
             this.x += dx / 10;
@@ -1320,7 +1322,7 @@ function updateUI() {
     if (hackText) hackText.textContent = `${Math.floor(hackGauge)}%`;
     const hackReady = document.getElementById('hack-ready-text');
     if (hackReady) hackReady.textContent = hackGauge >= 100 ? "!! SYSTEM_READY !!" : "(GATHERING_DATA)";
-    
+
     // ゴール到達率
     const goalPct = Math.min(100, (score / CLEAR_TIME) * 100);
     const goalBar = document.getElementById('goal-bar');
@@ -1412,30 +1414,30 @@ class Enemy {
                 }
             });
             if (Math.random() < 0.2) {
-                lightningStrikes.push({ 
-                    x1: this.x, y1: this.y, 
-                    x2: this.x + (Math.random()-0.5)*40, 
-                    y2: this.y + (Math.random()-0.5)*40, 
-                    life: 5 
+                lightningStrikes.push({
+                    x1: this.x, y1: this.y,
+                    x2: this.x + (Math.random() - 0.5) * 40,
+                    y2: this.y + (Math.random() - 0.5) * 40,
+                    life: 5
                 });
             }
         }
-        
+
         if (this.vulnerableTimer > 0) this.vulnerableTimer--;
 
         // Malware Stack: 自爆ロジック
         if (this.isSelfDestruct && Math.random() < 0.3) {
             enemyBullets.push({
                 x: this.x, y: this.y,
-                vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
+                vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10,
                 color: '#f00', size: 1.0, life: 60
             });
             this.hp -= 0.1;
         }
-        
+
         this.y += this.speed * speedMult;
         this.angle += 0.05 * speedMult;
-        
+
         // 全てのブラックホールに吸い寄せられる
         vortices.forEach(v => {
             const dx = v.x - this.x;
@@ -1452,7 +1454,7 @@ class Enemy {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle);
-        
+
         if (this.freezeTimer > 0) {
             ctx.strokeStyle = '#0af';
             // ctx.shadowBlur = 15;
@@ -1465,7 +1467,7 @@ class Enemy {
             ctx.strokeStyle = this.isShrink ? '#088' : '#0ff';
         }
         if (this.isShrink) ctx.scale(0.6, 0.6);
-        
+
         // 避雷針エフェクト
         if (this.staticFieldTimer > 0) {
             // ctx.shadowBlur = 10;
@@ -1479,15 +1481,15 @@ class Enemy {
         ctx.lineTo(15, 15); ctx.lineTo(-15, 15);
         ctx.closePath();
         ctx.stroke();
-        
+
         ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
         ctx.fillRect(-10, -10, 20, 20);
-        
+
         // Malware Noise
         if (this.noiseLevel > 0) {
             ctx.fillStyle = '#f00';
-            for(let i=0; i<this.noiseLevel; i++) {
-                ctx.fillRect((Math.random()-0.5)*30, (Math.random()-0.5)*30, 2, 2);
+            for (let i = 0; i < this.noiseLevel; i++) {
+                ctx.fillRect((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, 2, 2);
             }
         }
 
@@ -1496,23 +1498,23 @@ class Enemy {
             ctx.strokeStyle = '#f0f';
             ctx.strokeRect(-18, -18, 36, 36);
         }
-        
+
         // 内部パーツ
         ctx.strokeStyle = '#fff';
         ctx.strokeRect(-5, -5, 10, 10);
-        
+
         ctx.restore();
     }
     die() {
         createExplosion(this.x, this.y, this.isShrink ? '#088' : '#0ff', 15);
         if (player.hasFireworks) {
             const colors = ['#f00', '#ff0', '#0ff', '#f0f', '#fff'];
-            for(let i=0; i<5; i++) createExplosion(this.x, this.y, colors[i], 10);
+            for (let i = 0; i < 5; i++) createExplosion(this.x, this.y, colors[i], 10);
         }
         // ビット獲得量を固定 (2ビット)
         const count = 2;
         for (let i = 0; i < count; i++) bits.push(new Bit(this.x, this.y));
-        
+
         // ブラックホール設置（パッシブ）
         if (player.hasBlackHole && Math.random() < 0.2) {
             createVortex(this.x, this.y);
@@ -1548,12 +1550,12 @@ class Boss extends Enemy {
         this.maxHp = hp;
         this.name = name;
         this.isBoss = true;
-        this.state = 'enter'; 
+        this.state = 'enter';
         this.patternTimer = 0;
-        this.pattern = 0; 
+        this.pattern = 0;
         this.targetY = 80;
         this.angle = 0;
-        this.speed = 0; 
+        this.speed = 0;
     }
 
     update(speedMult) {
@@ -1612,28 +1614,28 @@ class Boss extends Enemy {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle);
-        
+
         ctx.strokeStyle = '#f0f';
         ctx.lineWidth = 3;
         // ctx.shadowBlur = 15;
         // ctx.shadowColor = '#f0f';
-        
+
         ctx.beginPath();
-        for(let i=0; i<12; i++) {
+        for (let i = 0; i < 12; i++) {
             const r = i % 2 === 0 ? 50 : 25;
             const a = i * Math.PI * 2 / 12;
             ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
         }
         ctx.closePath();
         ctx.stroke();
-        
+
         ctx.fillStyle = 'rgba(255, 0, 255, 0.2)';
         ctx.fill();
-        
+
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
         ctx.strokeRect(-15, -15, 30, 30);
-        
+
         ctx.restore();
     }
 
@@ -1654,42 +1656,42 @@ function createVortex(x, y) {
     vortices.push({ x: x, y: y, life: 300, radius: 0 });
 }
 function startGame() {
-    hp = MAX_HP; 
-    hackGauge = 0; 
-    score = 0; 
-    gameOver = false; 
-    gameActive = true; 
+    hp = MAX_HP;
+    hackGauge = 0;
+    score = 0;
+    gameOver = false;
+    gameActive = true;
     isHacking = false;
-    
-    player.activeModules = []; 
+
+    player.activeModules = [];
     player.barrierTimer = 0;
     player.isTimeStopped = false;
     player.isInvincible = false;
     player.invincibleTimer = 0;
     player.disarmedTimer = 0;
     player.advancedSubShips = 0;
-    
+
     bossesDefeated = 0;
     nextBossScore = 60;
     player.bossTimeElapsed = 0;
-    
+
     // システムビット初期化 (セッション毎に800にリセット)
     playerBits = 800;
     updateUI();
-    
+
     applyStaticStats(); // 初期ステータス適用
-    
+
     slowTimer = 0;
     startTime = Date.now();
     enemies = []; bullets = []; enemyBullets = []; bits = []; particles = []; vortices = [];
     turrets = []; decoys = []; portals = []; lightningStrikes = [];
-    
+
     document.getElementById('home-screen').classList.add('hidden');
     document.getElementById('overlay').classList.add('hidden');
     document.getElementById('side-hud').classList.remove('hidden');
     document.getElementById('controls-guide').classList.remove('hidden');
     document.getElementById('clear-screen').classList.add('hidden');
-    
+
     addLog("システム起動完了。");
     updateUI();
 }
@@ -1763,7 +1765,7 @@ document.querySelectorAll('.close-modal').forEach(b => b.onclick = () => {
 function update() {
     if (!gameActive || gameOver || isHacking) return;
     const now = Date.now();
-    
+
     // 接触フラグリセット
     contactFlags.player = false;
     contactFlags.enemy = false;
@@ -1782,7 +1784,7 @@ function update() {
     if (contactFlags.enemy || contactFlags.bit || contactFlags.bullet || contactFlags.blackhole) {
         contactFlags.player = true;
     }
-    
+
     // Boss戦中は時間を停止 (Mission Timer 停止)
     const isBossActive = enemies.some(e => e.isBoss);
     if (!isBossActive) {
@@ -1802,7 +1804,7 @@ function update() {
     updateConditionCache();
     applyStaticStats(); // ベース値を一旦戻す
     applyDynamicLogic(); // ロジックで上書き
-    
+
     if (player.autoHeal > 0 && hp < MAX_HP) {
         hp = Math.min(MAX_HP, hp + player.autoHeal);
     }
@@ -1907,7 +1909,7 @@ function update() {
     updateEnemies();
     updateBits();
     updateParticles();
-    
+
     // エンティティ更新
     turrets = turrets.filter(t => t.update(now));
     decoys = decoys.filter(d => d.update());
@@ -1950,7 +1952,7 @@ function update() {
         enemies.forEach(e => {
             if (Math.hypot(e.x - bx, e.y - by) < 80) e.hp -= 0.5;
         });
-        createExplosion(bx + (Math.random()-0.5)*40, by + (Math.random()-0.5)*40, '#fff', 2);
+        createExplosion(bx + (Math.random() - 0.5) * 40, by + (Math.random() - 0.5) * 40, '#fff', 2);
     }
 
     // ブラックホール実体
@@ -1996,7 +1998,7 @@ function fireBullets(now, chargeScale = 0) {
     let bulletSpeed = 10 * player.bulletSpeedMult;
     let bulletSize = 1 * player.bulletSizeMult;
     let damageMult = (player.isBloodPact ? (player.bloodPactDamage || 4.0) : 1.0);
-    
+
     // 基本ビットコスト (multiShot * 消費倍率)
     const bitCostPerShot = Math.ceil(player.multiShot * (player.bitCostMult || 1.0));
     let count = playerBits >= bitCostPerShot ? player.multiShot : 0;
@@ -2043,14 +2045,14 @@ function fireBullets(now, chargeScale = 0) {
         const angle = -Math.PI / 2 + offset;
         const vx = Math.cos(angle) * bulletSpeed;
         const vy = Math.sin(angle) * bulletSpeed;
-        
+
         bullets.push({
             x: player.x, y: player.y - 20,
             vx, vy, baseVx: vx, baseVy: vy,
             color: player.isLaser ? '#0ff' : (player.isExplosion ? '#f50' : '#0f4'),
             size: bulletSize,
             life: 240, time: 0,
-            
+
             isPiercing: player.isPiercing,
             isStationary: player.isStationary,
             isSplitting: player.isSplitting,
@@ -2077,10 +2079,10 @@ function fireBullets(now, chargeScale = 0) {
             isShrink: player.isShrink,
             isLightning: player.isLightning,
             bounces: player.isReflecting ? 5 : 0,
-            
+
             damage: damageMult,
             size: bulletSize,
-            
+
             originX: player.x, originY: player.y,
             hitEnemies: new Map(),
 
@@ -2093,11 +2095,11 @@ function fireBullets(now, chargeScale = 0) {
 
     if (player.isRearShot) {
         const angle = Math.PI / 2;
-        bullets.push({ 
-            x: player.x, y: player.y + 20, 
+        bullets.push({
+            x: player.x, y: player.y + 20,
             vx: Math.cos(angle) * bulletSpeed, vy: Math.sin(angle) * bulletSpeed,
-            baseVx: 0, baseVy: bulletSpeed, 
-            color: '#f0f', size: 1.0, life: 180, time: 0 
+            baseVx: 0, baseVy: bulletSpeed,
+            color: '#f0f', size: 1.0, life: 180, time: 0
         });
     }
 
@@ -2131,11 +2133,11 @@ function updateProjectiles(now) {
     // プレイヤー弾
     bullets = bullets.filter(b => {
         b.time++;
-        b.justHit = false; 
-        
+        b.justHit = false;
+
         // Phase 2: Latency Bomb Trail
         if (b.hasLatency && b.time % 3 === 0) {
-            b.latencyTrail.push({x: b.x, y: b.y, life: 60});
+            b.latencyTrail.push({ x: b.x, y: b.y, life: 60 });
         }
 
         // Phase 2: Synchro Link (同期)
@@ -2149,7 +2151,7 @@ function updateProjectiles(now) {
         }
 
         applyDynamicLogic(b); // 毎フレームのロジック評価 (IF ALWAYS 等)
-        
+
         // --- 挙動（フォーム・ブロック）の適用 ---
         if (b.isRotating) {
             // 自機の周りを回転 (Combo 2: 回転ブラックホール・バリア)
@@ -2157,7 +2159,7 @@ function updateProjectiles(now) {
             const orbitAngle = (b.time * 0.1) + (b.vx * 0.01);
             b.x = player.x + Math.cos(orbitAngle) * orbitRadius;
             b.y = player.y + Math.sin(orbitAngle) * orbitRadius;
-            
+
             // 回転中も引き寄せ (Combo 2)
             if (b.isAttract || b.isGravity) {
                 enemies.forEach(e => {
@@ -2175,7 +2177,7 @@ function updateProjectiles(now) {
         } else if (b.isWave) {
             // 波形移動
             const waveOffset = Math.sin(b.time * 0.2) * (b.isGrowing ? 20 : 8);
-            const perpX = -b.baseVy; 
+            const perpX = -b.baseVy;
             const perpY = b.baseVx;
             const mag = Math.hypot(perpX, perpY) || 1;
             b.x += (b.vx + (perpX / mag) * waveOffset);
@@ -2184,7 +2186,7 @@ function updateProjectiles(now) {
             // 往復 (Combo 3: 無限ブーメラン)
             if (b.time < 60) { b.x += b.vx; b.y += b.vy; }
             else { b.x -= b.vx; b.y -= b.vy; }
-            
+
             // 巨大化ブーメランならさらにヒット範囲拡大
             if (b.isGrowing) b.size = Math.min(5, b.size + 0.05);
         } else if (b.isStepAccel) {
@@ -2193,7 +2195,7 @@ function updateProjectiles(now) {
             const isWait = b.time < 40;
             const speedFact = isWait ? 0.2 : 3.5;
             b.x += b.vx * speedFact; b.y += b.vy * speedFact;
-            
+
             // 待機中はわずかに震える演出
             if (isWait) { b.x += Math.sin(b.time) * 2; b.y += Math.cos(b.time) * 2; }
         } else if (b.isHoming) {
@@ -2289,7 +2291,7 @@ function updateProjectiles(now) {
                 // 特殊効果
                 if (b.isFreeze) e.freezeTimer = 180;
                 if (b.isPoison) e.poisonTimer = 300;
-                
+
                 if (b.isChainAdv || b.isChain) {
                     const jumpDist = b.isChainAdv ? 180 : 120;
                     enemies.forEach(e2 => {
@@ -2301,12 +2303,12 @@ function updateProjectiles(now) {
                         }
                     });
                 }
-                
+
                 if (b.isShrink) {
                     e.isShrink = true;
-                    e.hp -= 1; 
+                    e.hp -= 1;
                 }
-                
+
                 if (b.isLightning) {
                     createLightning(b.x, b.y);
                 }
@@ -2314,7 +2316,7 @@ function updateProjectiles(now) {
                 // ダメージ適用 (Blood Pact・Drillの係数 + デコイシナジー + 残響)
                 const damage = (b.damage || 1) * (player.decoyDamageBoost || 1) * (e.vulnerableTimer > 0 ? 1.5 : 1.0);
                 e.hp -= damage;
-                
+
                 // Malware Stack (浸食)
                 if (player.hasMalware) {
                     e.noiseLevel = (e.noiseLevel || 0) + 1;
@@ -2322,7 +2324,7 @@ function updateProjectiles(now) {
                 }
                 bulletHitRecently = 10;
                 b.justHit = true; // 今回のフレームでヒットしたフラグ
-                
+
                 // 即時ロジック評価 (IF 敵に当たった THEN ...)
                 applyDynamicLogic(b);
 
@@ -2332,7 +2334,7 @@ function updateProjectiles(now) {
                     if (!b.isReflecting && !b.isBouncing) {
                         if (!b.isDrill) return false; // ドリルでなければ消滅
                     }
-                    
+
                     // 反射中の爆発ダメージ
                     enemies.forEach(e2 => {
                         if (Math.hypot(e2.x - b.x, e2.y - b.y) < 120 && e !== e2) {
@@ -2349,7 +2351,7 @@ function updateProjectiles(now) {
                         child.vy = (Math.random() - 0.5) * 12;
                         child.life = 120;
                         child.time = 0;
-                        child.isSplitting = false; 
+                        child.isSplitting = false;
                         child.hitEnemies = new Map(); // ヒット履歴リセット
                         bullets.push(child);
                     }
@@ -2436,7 +2438,7 @@ function updateEnemies() {
             const ebX = e.x; const ebY = e.y;
             const target = decoys.length > 0 ? decoys[0] : player;
             const angle = Math.atan2(target.y - ebY, target.x - ebX);
-            enemyBullets.push({ x: ebX, y: ebY, vx: Math.cos(angle)*4, vy: Math.sin(angle)*4 });
+            enemyBullets.push({ x: ebX, y: ebY, vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4 });
         }
         return true;
     });
@@ -2492,14 +2494,34 @@ window.addEventListener('error', () => { isHacking = false; gameActive = true; }
 
 function draw() {
     ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // モーションブラーのための半透明黒クリア
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(0, 5, 0, 0.3)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.globalCompositeOperation = 'lighter'; // グロウ効果
+
+    // スクロールするサイバー空間グリッド背景
+    ctx.strokeStyle = 'rgba(0, 255, 65, 0.15)';
+    ctx.lineWidth = 1;
+    let gridOffset = (Date.now() / 30) % 40;
+    ctx.beginPath();
+    for (let y = gridOffset; y < canvas.height; y += 40) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+    }
+    for (let x = 0; x < canvas.width; x += 40) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+    }
+    ctx.stroke();
 
     // 背景コード雨 (廃止)
 
     // プレイヤー描画 (機械っぽいデザイン)
     ctx.save();
     ctx.translate(player.x, player.y);
-    
+
     if (player.isInvincible) {
         ctx.globalAlpha = Math.sin(Date.now() / 50) * 0.5 + 0.5;
     }
@@ -2596,7 +2618,7 @@ function draw() {
         ctx.beginPath();
         ctx.arc(v.x, v.y, v.radius, 0, Math.PI * 2);
         ctx.fill();
-        
+
         ctx.strokeStyle = `rgba(100, 0, 255, 0.8)`;
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -2644,7 +2666,7 @@ function draw() {
     decoys.forEach(d => d.draw());
     portals.forEach(p => {
         ctx.strokeStyle = p.isExit ? '#f0f' : '#0ff';
-        ctx.beginPath(); ctx.arc(p.x, p.y, 20, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, 20, 0, Math.PI * 2); ctx.stroke();
     });
 
     // ブレードエフェクト

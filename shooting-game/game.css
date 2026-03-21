@@ -15,13 +15,14 @@ body {
 #game-container {
     position: relative;
     width: 98vw;
-    height: 55.125vw; /* 9:16 aspect */
+    height: 55.125vw;
+    /* 9:16 aspect */
     max-width: 960px;
     max-height: 100vh;
     margin: 0 auto;
     background: #000;
     /* 背景グリッドエフェクト */
-    background-image: 
+    background-image:
         linear-gradient(rgba(0, 255, 65, 0.05) 1px, transparent 1px),
         linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px);
     background-size: 20px 20px;
@@ -34,13 +35,26 @@ body {
     align-items: center;
 }
 
+/* CRT Overlay Effect */
+#game-container::after {
+    content: " ";
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
+    background-size: 100% 3px;
+    z-index: 200;
+    pointer-events: none;
+    box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.9);
+}
+
 /* 走査線（スキャンライン）エフェクト */
 #game-container::before {
     content: " ";
     position: absolute;
     inset: 0;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
-                linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+        linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
     background-size: 100% 2px, 3px 100%;
     pointer-events: none;
     z-index: 1000;
@@ -78,13 +92,37 @@ canvas {
 }
 
 @keyframes glitch {
-    0% { transform: translate(0); }
-    1% { transform: translate(-2px, 2px); text-shadow: 2px 0 #f0f, -2px 0 #0ff; }
-    2% { transform: translate(2px, -2px); text-shadow: -2px 0 #f0f, 2px 0 #0ff; }
-    3% { transform: translate(0); text-shadow: none; }
-    98% { transform: translate(0); }
-    99% { transform: translate(-1px, 1px); border-color: #0ff; }
-    100% { transform: translate(0); }
+    0% {
+        transform: translate(0);
+    }
+
+    1% {
+        transform: translate(-2px, 2px);
+        text-shadow: 2px 0 #f0f, -2px 0 #0ff;
+    }
+
+    2% {
+        transform: translate(2px, -2px);
+        text-shadow: -2px 0 #f0f, 2px 0 #0ff;
+    }
+
+    3% {
+        transform: translate(0);
+        text-shadow: none;
+    }
+
+    98% {
+        transform: translate(0);
+    }
+
+    99% {
+        transform: translate(-1px, 1px);
+        border-color: #0ff;
+    }
+
+    100% {
+        transform: translate(0);
+    }
 }
 
 #title-logo span {
@@ -119,7 +157,10 @@ button {
 button::after {
     content: '';
     position: absolute;
-    top: -50%; left: -50%; width: 200%; height: 200%;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
     background: linear-gradient(45deg, transparent, rgba(0, 255, 65, 0.1), transparent);
     transform: rotate(45deg);
     transition: 0.5s;
@@ -193,12 +234,26 @@ button:hover::after {
 }
 
 @keyframes logSlide {
-    from { transform: translateX(-10px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+    from {
+        transform: translateX(-10px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
-.log-entry.hack { color: #0ff; border-left-color: #0ff; }
-.log-entry.error { color: #f00; border-left-color: #f00; }
+.log-entry.hack {
+    color: #0ff;
+    border-left-color: #0ff;
+}
+
+.log-entry.error {
+    color: #f00;
+    border-left-color: #f00;
+}
 
 #hack-container {
     width: 100px;
@@ -327,8 +382,13 @@ button:hover::after {
 }
 
 @keyframes rainMove {
-    from { background-position: 0 0; }
-    to { background-position: 0 1000px; }
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 0 1000px;
+    }
 }
 
 .palette-scroll::-webkit-scrollbar {
@@ -388,15 +448,39 @@ button:hover::after {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
-.hack-item.type-main { border-left: 5px solid #00ff41; background: rgba(0, 40, 0, 0.8); }
-.hack-item.type-skill { border-left: 5px solid #f0f; background: rgba(40, 0, 40, 0.8); }
-.hack-item.type-passive { border-left: 5px solid #0ff; background: rgba(0, 40, 40, 0.8); }
-.hack-item.type-system { border-left: 5px solid #ff0; background: rgba(40, 40, 0, 0.8); }
-.hack-item.type-logic { border-left: 5px solid #b0f; background: rgba(30, 0, 40, 0.8); }
-.hack-item.type-cond { border-left: 5px solid #f80; background: rgba(40, 20, 0, 0.8); }
-.hack-item.type-num { 
-    border: 1px solid #fff; 
-    background: rgba(255, 255, 255, 0.1); 
+.hack-item.type-main {
+    border-left: 5px solid #00ff41;
+    background: rgba(0, 40, 0, 0.8);
+}
+
+.hack-item.type-skill {
+    border-left: 5px solid #f0f;
+    background: rgba(40, 0, 40, 0.8);
+}
+
+.hack-item.type-passive {
+    border-left: 5px solid #0ff;
+    background: rgba(0, 40, 40, 0.8);
+}
+
+.hack-item.type-system {
+    border-left: 5px solid #ff0;
+    background: rgba(40, 40, 0, 0.8);
+}
+
+.hack-item.type-logic {
+    border-left: 5px solid #b0f;
+    background: rgba(30, 0, 40, 0.8);
+}
+
+.hack-item.type-cond {
+    border-left: 5px solid #f80;
+    background: rgba(40, 20, 0, 0.8);
+}
+
+.hack-item.type-num {
+    border: 1px solid #fff;
+    background: rgba(255, 255, 255, 0.1);
     justify-content: center;
     min-height: 28px;
     width: auto;
@@ -424,8 +508,15 @@ button:hover::after {
     border-style: solid;
 }
 
-.cond-slot { border-color: #f80; color: #f80; }
-.action-slot { border-color: #b0f; color: #b0f; }
+.cond-slot {
+    border-color: #f80;
+    color: #f80;
+}
+
+.action-slot {
+    border-color: #b0f;
+    color: #b0f;
+}
 
 .param-slot.filled {
     border-style: solid;
@@ -543,7 +634,8 @@ button:hover::after {
 
 #deck-grid {
     display: grid;
-    grid-template-columns: repeat(10, 1fr); /* 巨大化防止：10列に固定 */
+    grid-template-columns: repeat(10, 1fr);
+    /* 巨大化防止：10列に固定 */
     gap: 4px;
     min-height: 40px;
 }
@@ -556,11 +648,13 @@ button:hover::after {
 
 .collection-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr)); /* アイコン追加に伴い少し縮小 */
+    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+    /* アイコン追加に伴い少し縮小 */
     gap: 8px;
     padding: 10px;
     overflow-y: auto;
-    flex-grow: 1; /* 残りのスペースを埋める */
+    flex-grow: 1;
+    /* 残りのスペースを埋める */
     border: 1px solid rgba(0, 255, 65, 0.2);
     background: rgba(0, 20, 0, 0.4);
 }
@@ -600,7 +694,8 @@ button:hover::after {
 }
 
 .collection-item .item-count {
-    display: none; /* 所持数制廃止につき非表示 */
+    display: none;
+    /* 所持数制廃止につき非表示 */
 }
 
 .collection-item span {
@@ -631,10 +726,25 @@ button:hover::after {
     font-weight: bold;
 }
 
-.collection-item.type-MAIN { border-color: #fff; box-shadow: 0 0 5px #fff; }
-.collection-item.type-SKILL { border-color: #f0f; box-shadow: 0 0 5px #f0f; }
-.collection-item.type-PASSIVE { border-color: #0ff; box-shadow: 0 0 5px #0ff; }
-.collection-item.type-SYSTEM { border-color: #ff0; box-shadow: 0 0 5px #ff0; }
+.collection-item.type-MAIN {
+    border-color: #fff;
+    box-shadow: 0 0 5px #fff;
+}
+
+.collection-item.type-SKILL {
+    border-color: #f0f;
+    box-shadow: 0 0 5px #f0f;
+}
+
+.collection-item.type-PASSIVE {
+    border-color: #0ff;
+    box-shadow: 0 0 5px #0ff;
+}
+
+.collection-item.type-SYSTEM {
+    border-color: #ff0;
+    box-shadow: 0 0 5px #ff0;
+}
 
 .collection-item:hover {
     transform: translateY(-2px);
@@ -688,7 +798,8 @@ button:hover::after {
     display: flex;
     flex-direction: column;
     border-radius: 8px;
-    max-height: 85vh; /* 画面からはみ出さないように制限 */
+    max-height: 85vh;
+    /* 画面からはみ出さないように制限 */
     overflow: hidden;
 }
 
@@ -708,9 +819,22 @@ button:hover::after {
 }
 
 @keyframes consoleGlitch {
-    0% { transform: scaleY(0); opacity: 0; filter: hue-rotate(90deg); }
-    50% { transform: scaleY(1.1); filter: hue-rotate(-90deg); }
-    100% { transform: scaleY(1); opacity: 1; filter: hue-rotate(0deg); }
+    0% {
+        transform: scaleY(0);
+        opacity: 0;
+        filter: hue-rotate(90deg);
+    }
+
+    50% {
+        transform: scaleY(1.1);
+        filter: hue-rotate(-90deg);
+    }
+
+    100% {
+        transform: scaleY(1);
+        opacity: 1;
+        filter: hue-rotate(0deg);
+    }
 }
 
 .scanline {
@@ -719,8 +843,8 @@ button:hover::after {
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
-                linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+        linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
     background-size: 100% 4px, 3px 100%;
     pointer-events: none;
     z-index: 10;
@@ -728,6 +852,11 @@ button:hover::after {
 }
 
 @keyframes scanlineMove {
-    from { background-position: 0 0; }
-    to { background-position: 0 100%; }
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 0 100%;
+    }
 }
