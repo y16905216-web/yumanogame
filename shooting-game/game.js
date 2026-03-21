@@ -2273,8 +2273,8 @@ function updateProjectiles(now) {
             b.y += (b.vy + (perpY / mag) * waveOffset);
         } else if (b.isBoomerang) {
             // 往復 (Combo 3: 無限ブーメラン)
-            // 60フレームごとに進行方向を反転させて無限に往復させる
-            if (Math.floor(b.time / 60) % 2 === 0) {
+            // 30フレームごとに進行方向を反転させて無限に往復させる (画面外消滅を防ぐため短縮)
+            if (Math.floor(b.time / 30) % 2 === 0) {
                 b.x += b.vx; b.y += b.vy;
             } else {
                 b.x -= b.vx; b.y -= b.vy;
