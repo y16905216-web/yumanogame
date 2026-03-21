@@ -272,8 +272,6 @@ for (let i = 0; i < 30; i++) {
 
 // --- 3. 入力操作 ---
 const keys = {};
-let isPaused = false;
-let isEasyMode = false;
 window.addEventListener('keydown', e => {
     keys[e.key] = true;
     if ((e.key === 'p' || e.key === 'P' || e.key === 'Escape') && gameActive && !gameOver && !isHacking) {
@@ -1489,42 +1487,6 @@ function triggerSkill(skillId, param) {
     }
 }
 
-function takeDamage(amt) {
-    if (player.isInvincible || player.barrierTimer > 0) {
-        // バリア被弾: 镜面に回りの山を作る
-        if (player.barrierTimer > 0) {
-            enemyBullets.filter(eb => Math.hypot(eb.x - player.x, eb.y - player.y) < 100).forEach(eb => {
-                bullets.push({
-                    x: eb.x, y: eb.y, vx: -eb.vx * 1.5, vy: -eb.vy * 1.5,
-                    color: '#0ff', size: 1.0, life: 120, time: 0, hitEnemies: new Map(),
-                    isExplosion: player.isExplosion
-                });
-            });
-            enemyBullets = enemyBullets.filter(eb => Math.hypot(eb.x - player.x, eb.y - player.y) >= 100);
-        }
-        return;
-    }
-
-    // 耐忍コンボ: HP1れぞ特殊発動
-    if (player.hasEndurance && hp - amt <= 0 && hp > 1) {
-        hp = 1;
-        player.hasEndurance = false; // 1回かぎ
-        player.isInvincible = true;
-        hackGauge = 100; // ゲージ全回復
-        addLog('\u26a1 耐忍発動! 無敵でゲージ充全!', 'hack');
-        createExplosion(player.x, player.y, '#fff', 30);
-        setTimeout(() => { player.isInvincible = false; }, 2000);
-        return;
-    }
-
-    hp -= amt;
-    // screenShake = 15; // REMOVED
-    if (hp <= 0) {
-        hp = 0;
-        gameOver = true;
-        showGameOver();
-    }
-}
 
 function createExplosion(x, y, color, count) {
     if (particles.length > 200) count = Math.min(count, 2);
