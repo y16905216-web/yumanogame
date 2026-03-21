@@ -26,10 +26,10 @@ let bulletHitRecently = 0;
 let bitMultiplier = 1;
 let screenShake = 0;
 let playerPowerLevel = 0; // 敵難易度スケーリング用
-let terminalLogs = ["SYSTEM_READY"];
 let bossesDefeated = 0;
 let nextBossScore = 60;
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window);
+let towerMissiles = [];
 
 let player = {
     x: canvas.width / 2, y: canvas.height / 2, w: 30, h: 30,
@@ -234,7 +234,7 @@ class TowerManager {
         
         // オブジェクトのクリア
         enemies = []; bullets = []; enemyBullets = []; bits = []; particles = []; vortices = [];
-        turrets = []; decoys = []; portals = []; lightningStrikes = [];
+        turrets = []; decoys = []; portals = []; lightningStrikes = []; towerMissiles = [];
         
         // モジュールとステータスの同期
         player.activeModules = JSON.parse(JSON.stringify(hackingStack));
@@ -318,6 +318,27 @@ canvas.addEventListener('mousemove', e => {
     const scaleY = canvas.height / rect.height;
     mouseX = (e.clientX - rect.left) * scaleX;
     mouseY = (e.clientY - rect.top) * scaleY;
+});
+
+canvas.addEventListener('pointerdown', e => {
+    if (player.isTargetingMissile) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const tx = (e.clientX - rect.left) * scaleX;
+        const ty = (e.clientY - rect.top) * scaleY;
+        player.isTargetingMissile = false;
+        player.isSlowMotion = false; // 時間減速を解除
+        addLog("MISSILE: 照準固定、ミサイル射出！", "error");
+        towerMissiles.push({
+            startX: player.x, startY: player.y,
+            x: player.x, y: player.y,
+            targetX: tx, targetY: ty,
+            progress: 0,
+            speed: 0.04
+        });
+        hackGauge = 0; // 消費
+    }
 });
 
 canvas.addEventListener('touchmove', e => {
@@ -1068,6 +1089,7 @@ function showTowerAssembleScreen() {
     towerState.pendingReward = null;
     
     // ハッキング画面を出さずに、自動でステータスを更新してフロア選択へ
+    player.activeModules = JSON.parse(JSON.stringify(hackingStack));
     applyStaticStats();
     applyDynamicLogic();
     updateUI();
@@ -1090,6 +1112,7 @@ function showTowerShopScreen() {
         { id: 'overclock', name: 'オーバークロック', desc: '一時的に連射狂化されるが、後で速度低下', price: 400 },
         { id: 'logic_chain', name: 'ロジック・チェーン', desc: '敵撃破時に周囲の敵へ連爆ダメージ伝播', price: 500 },
         { id: 'rewrite_code', name: 'リライト・コード', desc: '周囲の敵をハッキングし同士討ちさせる', price: 600 },
+        { id: 'missile_strike', name: 'ミサイル・ストライク', desc: '画面をタップした位置に超広範囲爆撃', price: 700 },
         { id: 'code_burst', name: 'コード・バースト', desc: '全敵を静止し、解除時に蓄積ダメージを与える', price: 800 }
     ];
     
@@ -1938,9 +1961,9 @@ function updateUI() {
         
         const cooldownBar = document.getElementById('tower-skill-cooldown-bar');
         if (cooldownBar && player.currentTowerSkill) {
-            const pct = Math.max(0, 100 - (towerState.skillCooldown / towerState.skillMaxCooldown) * 100);
+            const pct = Math.floor(hackGauge);
             cooldownBar.style.width = `${pct}%`;
-            cooldownBar.style.background = pct >= 100 ? '#00ff41' : '#f00';
+            cooldownBar.style.background = pct >= 100 ? '#00ff41' : '#066';
             skillName.style.color = pct >= 100 ? '#fff' : '#888';
         }
     } else {
@@ -2585,10 +2608,15 @@ function update() {
                 openHackingScreen();
             }
         } else {
-            // タワーモードのスキル発動
-            if (player.currentTowerSkill && towerState.skillCooldown <= 0 && gameActive && !gameOver) {
-                activateTowerSkill(player.currentTowerSkill);
-                towerState.skillCooldown = towerState.skillMaxCooldown; // 発動後にクールダウン突入
+            // タワーモードのスキル発動 (HackGauge 100%消費)
+            if (player.currentTowerSkill && hackGauge >= 100 && gameActive && !gameOver) {
+                if (player.currentTowerSkill === 'missile_strike') {
+                    // Start targeting mode directly (doesn't consume gauge until fired)
+                    activateTowerSkill('missile_strike');
+                } else {
+                    activateTowerSkill(player.currentTowerSkill);
+                    hackGauge = 0; // ゲージ消費
+                }
                 keys['s'] = false; keys['S'] = false; // 連続発動防止
             }
         }
@@ -2629,6 +2657,7 @@ function update() {
 
     // 更新処理
     updateProjectiles(now);
+    updateTowerMissiles();
     updateEnemies();
     updateBits();
     updateParticles();
@@ -2878,6 +2907,28 @@ function fireBullets(now, chargeScale = 0) {
     }
 }
 
+function updateTowerMissiles() {
+    towerMissiles = towerMissiles.filter(m => {
+        m.progress += m.speed;
+        m.x = m.startX + (m.targetX - m.startX) * m.progress;
+        // Parabolic arc for vertical Y
+        m.y = m.startY + (m.targetY - m.startY) * m.progress - Math.sin(m.progress * Math.PI) * 200;
+        
+        if (m.progress >= 1) {
+            createExplosion(m.targetX, m.targetY, '#f80', 250);
+            createExplosion(m.targetX, m.targetY, '#fff', 150);
+            enemies.forEach(e => {
+                if (Math.hypot(e.x - m.targetX, e.y - m.targetY) < 250) {
+                    e.hp -= 300 * (player.towerDamageMult || 1.0); // 大ダメージ
+                }
+            });
+            screenShake = 20; // 画面揺れ追加
+            return false;
+        }
+        return true;
+    });
+}
+
 function activateTowerSkill(skillId) {
     if (!gameActive) return;
     
@@ -2914,6 +2965,11 @@ function activateTowerSkill(skillId) {
                 }
             });
             break;
+        case 'missile_strike':
+            player.isTargetingMissile = true;
+            player.isSlowMotion = true; // 時間減速開始
+            addLog("SKILL: 攻撃座標を指定してください", "hack");
+            break;
         case 'code_burst':
             player.isTimeStopped = true; // 既存の時間を止めるフラグを流用
             addLog("SKILL: コード・バースト (無限ループ)", "hack");
@@ -2928,7 +2984,7 @@ function activateTowerSkill(skillId) {
                         e.frozenDamage = 0;
                     }
                 });
-            }, 3000);
+            }, 5000);
             break;
     }
 }
@@ -3622,6 +3678,28 @@ function draw() {
         ctx.arc(v.x, v.y, v.radius * 1.1, 0, Math.PI * 2);
         ctx.stroke();
     });
+
+    // タワーミサイル描画
+    towerMissiles.forEach(m => {
+        ctx.fillStyle = '#f80';
+        ctx.beginPath(); ctx.arc(m.x, m.y, 8, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+        // ターゲット地点を示すレティクル
+        ctx.strokeStyle = '#f00'; ctx.beginPath(); ctx.arc(m.targetX, m.targetY, 250 * m.progress, 0, Math.PI*2); ctx.stroke();
+    });
+
+    // ターゲット指定モード時のオーバーレイ
+    if (player.isTargetingMissile) {
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff'; ctx.font = '24px monospace';
+        ctx.textAlign = 'center'; ctx.fillText(">> SELECT TARGET LOCATION <<", canvas.width/2, canvas.height/2 - 50);
+        
+        ctx.strokeStyle = '#f00'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(mouseX, mouseY, 40, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(mouseX - 50, mouseY); ctx.lineTo(mouseX + 50, mouseY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(mouseX, mouseY - 50); ctx.lineTo(mouseX, mouseY + 50); ctx.stroke();
+    }
 
     // 敵弾描画
     ctx.fillStyle = '#f11';
