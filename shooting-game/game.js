@@ -1,10 +1,12 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-canvas.width = 960;
-canvas.height = 540;
+canvas.width = 540;
+canvas.height = 960;
 
 // --- 1. 定数・初期設定 ---
+const BATTLE_FIELD_HEIGHT = 600;
+const INTERACTION_FIELD_HEIGHT = 360;
 const MAX_HP = 100;
 const PLAYER_SPEED = 5;
 const ENEMY_SPAWN_RATE = 0.03; // 出現率を低下 (0.06 -> 0.03)
@@ -33,7 +35,7 @@ const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/
 let towerMissiles = [];
 
 let player = {
-    x: canvas.width / 2, y: canvas.height / 2, w: 30, h: 30,
+    x: canvas.width / 2, y: canvas.height - 100, w: 30, h: 30,
     speed: PLAYER_SPEED, fireRate: 180, multiShot: 1, piercing: false, shield: 0,
     activeModules: [], // インストールされたモジュール {id, param}
     subShips: 0,
@@ -93,6 +95,8 @@ let enemyBullets = [];
 let enemies = [];
 let threads = []; // 追加: スレッド(糸)の配列
 let bits = []; // 獲得アイテム
+let isSwiping = false;
+let swipeConnectedBits = [];
 let particles = [];
 let vortices = []; // Grabi用
 let turrets = [];
@@ -330,6 +334,7 @@ let mouseX = canvas.width / 2;
 let mouseY = canvas.height / 2;
 
 canvas.addEventListener('mousemove', e => {
+    if (isSwiping) return; // スワイプ中はマウス移動でのレティクル追従を制限（任意）
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
@@ -338,6 +343,19 @@ canvas.addEventListener('mousemove', e => {
 });
 
 canvas.addEventListener('pointerdown', e => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const px = (e.clientX - rect.left) * scaleX;
+    const py = (e.clientY - rect.top) * scaleY;
+
+    if (py > BATTLE_FIELD_HEIGHT) {
+        isSwiping = true;
+        swipeConnectedBits = [];
+        // 初回の衝突判定
+        checkSwipeCollision(px, py);
+    }
+
     if (player.isTargetingMissile) {
         const rect = canvas.getBoundingClientRect();
         const scaleX = canvas.width / rect.width;
@@ -357,6 +375,61 @@ canvas.addEventListener('pointerdown', e => {
         hackGauge = 0; // 消費
     }
 });
+
+canvas.addEventListener('pointermove', e => {
+    if (!isSwiping) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const px = (e.clientX - rect.left) * scaleX;
+    const py = (e.clientY - rect.top) * scaleY;
+    checkSwipeCollision(px, py);
+});
+
+canvas.addEventListener('pointerup', () => {
+    if (isSwiping) {
+        if (swipeConnectedBits.length >= 3) {
+            executeSwipeAttack();
+        }
+        isSwiping = false;
+        swipeConnectedBits = [];
+    }
+});
+
+function checkSwipeCollision(px, py) {
+    bits.forEach(b => {
+        if (!swipeConnectedBits.includes(b)) {
+            const d = Math.hypot(b.x - px, b.y - py);
+            if (d < 40) {
+                swipeConnectedBits.push(b);
+                // 連結エフェクト
+                createExplosion(b.x, b.y, '#0ff', 5);
+            }
+        }
+    });
+}
+
+function executeSwipeAttack() {
+    const power = swipeConnectedBits.length;
+    addLog(`SWIPE_LINK: ${power} BITS CONNECTED!`, 'hack');
+    
+    // 特殊攻撃の放出
+    for (let i = 0; i < power; i++) {
+        bullets.push({
+            x: player.x, y: player.y - 40,
+            vx: (Math.random() - 0.5) * 10, vy: -15,
+            color: '#fff', size: 1.5, life: 120, damage: 5.0
+        });
+    }
+    
+    // ゲージも大幅増加
+    hackGauge = Math.min(100, hackGauge + power * 2);
+    
+    // ビットを消費
+    bits = bits.filter(b => !swipeConnectedBits.includes(b));
+    playerBits += power;
+    updateUI();
+}
 
 canvas.addEventListener('touchmove', e => {
     e.preventDefault();
@@ -1680,36 +1753,40 @@ class Portal {
 class Bit {
     constructor(x, y) {
         this.x = x; this.y = y;
+        this.vx = (Math.random() - 0.5) * 4;
+        this.vy = 2 + Math.random() * 2;
+        this.inInteractionArea = false;
     }
     update() {
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist < 30) {
-            // ビット消失フロア
-            if (isTowerMode && towerState.currentTrouble === 'nobits') {
-                addLog("!! ERROR: BIT_STORAGE_OFFLINE", "error");
-            } else {
-                let gain = 1;
-                if (isTowerMode && player.towerBitGainMult) gain *= player.towerBitGainMult;
-                playerBits += Math.floor(gain);
-                contactFlags.bit = true;
-                updateUI();
-            }
-            return true;
+        if (this.y > BATTLE_FIELD_HEIGHT) {
+            this.inInteractionArea = true;
         }
-        const magnetRange = (player.isMagnet ? 400 : 200) + (player.towerMagnetRange || 0);
-        if (dist < magnetRange) {
-            this.x += dx / 10;
-            this.y += dy / 10;
+
+        if (this.inInteractionArea) {
+            // 下部エリア内での動き（バウンドまたは滞留）
+            this.x += this.vx;
+            this.y += this.vy;
+            if (this.x < 20 || this.x > canvas.width - 20) this.vx *= -1;
+            if (this.y < BATTLE_FIELD_HEIGHT + 20 || this.y > canvas.height - 20) this.vy *= -1;
+            
+            // 摩擦
+            this.vx *= 0.99;
+            this.vy *= 0.99;
         } else {
-            this.y += 2;
+            this.y += 3;
         }
-        return this.y > canvas.height;
+
+        return false; // 基本的に消えない（スワイプで消す）
     }
     draw() {
-        ctx.fillStyle = '#0f0';
-        ctx.fillRect(this.x - 4, this.y - 4, 8, 8);
+        const isConnected = swipeConnectedBits.includes(this);
+        ctx.fillStyle = isConnected ? '#fff' : '#0f0';
+        if (isConnected) {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#fff';
+        }
+        ctx.fillRect(this.x - 6, this.y - 6, 12, 12);
+        ctx.shadowBlur = 0;
     }
 }
 
@@ -1836,18 +1913,34 @@ function gameClear() {
 
 class Enemy {
     constructor() {
-        // 画面上部からスポーンし、垂直方向に移動する
-        this.x = Math.random() * (canvas.width - 100) + 50;
-        this.y = -50;
-        this.dirX = 0;
-        this.dirY = 1;
+        // 4辺のどこかからランダムにスポーン
+        const side = Math.floor(Math.random() * 4);
+        if (side === 0) { // 上から
+            this.x = Math.random() * canvas.width;
+            this.y = -20;
+            this.dirX = 0; this.dirY = 1;
+        } else if (side === 1) { // 戦闘エリア下部から
+            this.x = Math.random() * canvas.width;
+            this.y = BATTLE_FIELD_HEIGHT + 20;
+            this.dirX = 0; this.dirY = -1;
+        } else if (side === 2) { // 左から
+            this.x = -20;
+            this.y = Math.random() * BATTLE_FIELD_HEIGHT;
+            this.dirX = 1; this.dirY = 0;
+        } else { // 右から
+            this.x = canvas.width + 20;
+            this.y = Math.random() * BATTLE_FIELD_HEIGHT;
+            this.dirX = -1; this.dirY = 0;
+        }
 
         // HPを大幅に強化 (弾幕シューティングから糸で吸う形へ)
         let baseHp = 150 + Math.floor((playerPowerLevel || 0) * 30);
         if (bossesDefeated >= 1) {
             baseHp = Math.max(200, baseHp);
         }
-        this.speed = (2 + Math.random() * 2) * 0.5;
+        let baseSpd = (2 + Math.random() * 2) * 0.5;
+        if (isTowerMode) baseSpd *= 0.6; // タワーモード専用移動速度低下
+        this.speed = baseSpd;
         this.color = '#0ff';
         this.type = 'normal';
         this.w = 30;
@@ -2302,9 +2395,9 @@ function startGame() {
     isHacking = false;
     hackingStack = []; // 通常モード開始時にスタックをリセット
     player.x = canvas.width / 2;
-    player.y = canvas.height / 2;
-
-    player.activeModules = [];
+    player.y = canvas.height - 80;
+    
+    player.activeModules = []; 
     player.barrierTimer = 0;
     player.isTimeStopped = false;
     player.isInvincible = false;
@@ -2486,9 +2579,9 @@ function update() {
 
     updateUI();
 
-    // プレイヤー移動 (固定砲台)
+    // プレイヤー移動 (固定砲台: 下部中央)
     player.x = canvas.width / 2;
-    player.y = canvas.height / 2;
+    player.y = canvas.height - 80;
     player.moveX = 0;
     player.moveY = 0;
 
@@ -2595,56 +2688,10 @@ function update() {
         }
     }
 
-    // サブ機によるスレッド支援 (敵を拘束 & プレイヤーをサポート)
-    if ((player.subShips || 0) > 0) {
-        for (let i = 0; i < player.subShips; i++) {
-            const angle = (now / 1000) + (i * Math.PI * 2 / player.subShips);
-            const sx = player.x + Math.cos(angle) * 60;
-            const sy = player.y + Math.sin(angle) * 60;
-
-            // 防御判定 (敵弾の消去)
-            enemyBullets = enemyBullets.filter(eb => {
-                if (Math.hypot(eb.x - sx, eb.y - sy) < 30) {
-                    createExplosion(eb.x, eb.y, '#0ff', 0.5);
-                    return false;
-                }
-                return true;
-            });
-
-            // スレッド射出支援 (一定間隔で最も近い未接続の敵を狙う)
-            if (enemies.length > 0 && now % 500 < 20) {
-                // まだ接続されていない敵を優先
-                let target = null;
-                let minDist = 300;
-                for (let e of enemies) {
-                    if (e.isAlly || e.isBoss) continue;
-                    const d = Math.hypot(e.x - sx, e.y - sy);
-                    if (d < minDist) { minDist = d; target = e; }
-                }
-                if (target) {
-                    const tAngle = Math.atan2(target.y - sy, target.x - sx);
-                    threads.push({
-                        originX: sx, originY: sy,
-                        x: sx, y: sy,
-                        vx: Math.cos(tAngle) * 12,
-                        vy: Math.sin(tAngle) * 12,
-                        active: false,
-                        target: null,
-                        life: 100, baseLife: 100,
-                        width: 1.5,
-                        isHoming: true,
-                        drainRate: 0.3,
-                        ownerType: 'subship',
-                        ownerId: `subship_${i}`
-                    });
-                }
-            }
-        }
-    }
-
-    // 敵スポーン (難易度調整: 出現率と倍率を大幅抑制)
-    const towerSpawnMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.01) : 1.0; // 0.02 -> 0.01
-    const dynamicSpawnRate = (ENEMY_SPAWN_RATE * 0.7) * (1 + playerPowerLevel * 0.5) * (1 + bossesDefeated * 0.2) * towerSpawnMult;
+    // 敵スポーン (難易度大幅アップ: レベルとボス撃破数で相乗効果)
+    const towerSpawnMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.02) : 1.0; 
+    let dynamicSpawnRate = ENEMY_SPAWN_RATE * (1 + playerPowerLevel * 2.0) * (1 + bossesDefeated * 0.8) * towerSpawnMult;
+    if (isTowerMode) dynamicSpawnRate *= 0.3; // タワーモード専用スポーン大幅減
     if (Math.random() < dynamicSpawnRate) {
         enemies.push(new Enemy());
     }
@@ -3627,13 +3674,12 @@ function updateEnemies() {
                 createExplosion(e.x, e.y, '#f00', 5);
                 for (let e2 of enemies) { if (Math.hypot(e2.x - e.x, e2.y - e.y) < 80) e2.hp -= 1; }
             }
-            if (player.hasLogicChainActive) {
-                createExplosion(e.x, e.y, '#0ff', 15);
+            if (isTowerMode) {
+                createExplosion(e.x, e.y, '#f80', 80); // 巨大爆発エフェクト
                 for (let e2 of enemies) {
-                    if (e2 !== e && Math.hypot(e2.x - e.x, e2.y - e.y) < 180) {
-                        e2.hp -= 30; // 誘爆ダメージ
-                        // 接続線エフェクト
-                        lightningStrikes.push({ x1: e.x, y1: e.y, x2: e2.x, y2: e2.y, life: 10, color: '#0ff' });
+                    if (e2 !== e && Math.hypot(e2.x - e.x, e2.y - e.y) < 100) {
+                        e2.hp -= 30 * (player.towerDamageMult || 1.0); // 巻き込みダメージ
+                        createExplosion(e2.x, e2.y, '#f40', 20); // バチバチ
                     }
                 }
             }
@@ -4031,6 +4077,31 @@ function draw() {
 
     // 敵描画
     enemies.forEach(e => e.draw());
+
+    // フィールド境界線
+    ctx.strokeStyle = 'rgba(0, 255, 65, 0.5)';
+    ctx.setLineDash([10, 10]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, BATTLE_FIELD_HEIGHT);
+    ctx.lineTo(canvas.width, BATTLE_FIELD_HEIGHT);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // スワイプの糸描画
+    if (isSwiping && swipeConnectedBits.length > 0) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        swipeConnectedBits.forEach((b, i) => {
+            if (i === 0) ctx.moveTo(b.x, b.y);
+            else ctx.lineTo(b.x, b.y);
+        });
+        ctx.stroke();
+        
+        // 最後のビットから現在のポインタ位置まで線を引く（任意）
+        // if (swipeConnectedBits.length > 0) { ... }
+    }
 
     // ビット描画
     bits.forEach(b => b.draw());
