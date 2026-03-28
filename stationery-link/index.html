@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ステツム - STATIONERY LINK -</title>
+    <title>ステリク - STATIONERY LINK -</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +18,7 @@
                 <div class="top-status-bar">
                     <span class="coin-display">💰 <span id="coin-count">0</span></span>
                 </div>
-                <h1 class="game-logo">ステツム<br><small>- STATIONERY LINK -</small></h1>
+                <h1 class="game-logo"><span>ステリク</span><br><small>- STATIONERY LINK -</small></h1>
                 <div class="user-stats">
                     <p>ハイスコア: <span id="high-score-display">0</span></p>
                     <p>プレイ回数: <span id="play-count-display">0</span></p>
@@ -27,18 +27,58 @@
                 <div class="home-center-visual">
                     <img src="assets/mono.png" id="home-equipped-char-img" class="floating-icon main-equipped" alt="icon1">
                 </div>
-                <button id="btn-play" class="primary-btn">PLAY</button>
+                <button id="btn-play" class="paper-btn primary-size">PLAY</button>
             </div>
         </div>
 
         <!-- Character Screen -->
-        <div id="view-character" class="screen">
-            <header class="screen-header">
-                <h2>キャラクター (マイステ)</h2>
-            </header>
-            <div class="scroll-content">
-                <div class="character-grid" id="character-list">
-                    <!-- Populated by JS -->
+        <div id="view-character" class="screen ts-layout">
+            <!-- Top Detail Area -->
+            <div class="character-detail-area">
+                <div class="detail-top">
+                    <div class="detail-icon">
+                        <img id="detail-char-img" src="" alt="char">
+                    </div>
+                    <div class="detail-info">
+                        <h2 id="detail-char-name">-</h2>
+                        <span id="detail-char-series">『-』より</span>
+                    </div>
+                </div>
+                
+                <div class="detail-skill-desc">
+                    <p id="detail-char-desc">-</p>
+                    <div class="warning-icon">!</div>
+                </div>
+
+                <div class="detail-stats">
+                    <div class="stat-row">
+                        <span class="stat-label">レベル <span class="stat-num">1 / 50</span></span>
+                        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: 10%;"></div></div>
+                        <span class="stat-max">MAX</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">スキル <span class="stat-num">1 / 6</span></span>
+                        <div class="progress-bar-bg"><div class="progress-bar-fill skill" style="width: 0%;"></div></div>
+                        <span class="stat-ratio">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Container Area -->
+            <div class="character-bottom-container">
+                <div class="character-list-area">
+                    <div class="list-header">
+                        <span>ステコレクション</span>
+                        <div id="page-dots-container" class="page-dots"></div>
+                    </div>
+                    <div class="horizontal-scroll-container" id="character-pages-container">
+                        <!-- Populated by JS with .char-page elements -->
+                    </div>
+                </div>
+                
+                <!-- Set Button moved to bottom area -->
+                <div class="character-action-area">
+                    <button id="btn-set-mysta" class="paper-btn">マイステにセット</button>
                 </div>
             </div>
         </div>
@@ -77,7 +117,7 @@
                 <h2 id="gacha-result-title">New!</h2>
                 <img id="gacha-result-img" src="" alt="result">
                 <p id="gacha-result-name">キャラ名</p>
-                <button id="btn-close-gacha" class="primary-btn">OK</button>
+                <button id="btn-close-gacha" class="paper-btn">OK</button>
             </div>
         </div>
 
@@ -111,17 +151,17 @@
             </div>
         </div>
 
-        <!-- Bottom Navigation -->
-        <nav id="bottom-nav">
-            <div class="nav-item active" data-target="view-home">
+        <!-- Side Navigation (Sticky Tabs) -->
+        <nav id="side-nav">
+            <div class="nav-item active sticky-tab" data-target="view-home">
                 <div class="nav-icon">🏠</div>
                 <span>ホーム</span>
             </div>
-            <div class="nav-item" data-target="view-character">
+            <div class="nav-item sticky-tab" data-target="view-character">
                 <div class="nav-icon">📓</div>
                 <span>マイステ</span>
             </div>
-            <div class="nav-item" data-target="view-shop">
+            <div class="nav-item sticky-tab" data-target="view-shop">
                 <div class="nav-icon">🛍️</div>
                 <span>ショップ</span>
             </div>

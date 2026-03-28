@@ -6,11 +6,11 @@ const Engine = Matter.Engine,
       Vector = Matter.Vector;
 
 // Config
-const ITEM_RADIUS = 30; // アイコンのサイズ
-const MAX_ITEMS = 60; // 画面内限界
+const ITEM_RADIUS = 38; // ツムツムに近い大きめサイズにアップ
+const MAX_ITEMS = 40; // サイズ倍増に伴い画面内限界を調整
 let container = document.getElementById('view-play');
-let CANVAS_WIDTH = container.offsetWidth;
-let CANVAS_HEIGHT = container.offsetHeight;
+let CANVAS_WIDTH = container.clientWidth;
+let CANVAS_HEIGHT = container.clientHeight;
 
 // Engine Setup
 const engine = Engine.create();
@@ -23,8 +23,8 @@ canvas.height = CANVAS_HEIGHT;
 const ctx = canvas.getContext('2d');
 
 window.addEventListener('resize', () => {
-    CANVAS_WIDTH = container.offsetWidth || window.innerWidth;
-    CANVAS_HEIGHT = container.offsetHeight || window.innerHeight;
+    CANVAS_WIDTH = container.clientWidth || window.innerWidth;
+    CANVAS_HEIGHT = container.clientHeight || window.innerHeight;
     if(canvas) {
         canvas.width = CANVAS_WIDTH;
         canvas.height = CANVAS_HEIGHT;
@@ -121,6 +121,36 @@ function playKnockSound() {
     
     osc.start(audioCtx.currentTime);
     osc.stop(audioCtx.currentTime + 0.05);
+}
+
+function playScribbleSound() {
+    if(!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const noise = audioCtx.createOscillator();
+    const noiseGain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+    
+    // High pass filter for scratchy "scribble" sound
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(1000 + Math.random() * 2000, audioCtx.currentTime);
+    
+    // Use a noisy-ish oscillator or just transient
+    noise.type = 'sawtooth';
+    noise.frequency.setValueAtTime(200 + Math.random() * 100, audioCtx.currentTime);
+    noise.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.05);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+    
+    noiseGain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+    
+    noise.start(audioCtx.currentTime);
+    noise.stop(audioCtx.currentTime + 0.05);
 }
 
 // Knock Button Event
@@ -242,9 +272,25 @@ window.addEventListener('pointerup', () => {
 });
 
 function checkIntersection(pos) {
-    const bodiesUnder = Matter.Query.point(items, pos);
+    // 指の周りの大まかな範囲で拾う（つなぎやすさUP）
+    const searchRad = 20; 
+    const bounds = {
+        min: { x: pos.x - searchRad, y: pos.y - searchRad },
+        max: { x: pos.x + searchRad, y: pos.y + searchRad }
+    };
+    const bodiesUnder = Matter.Query.region(items, bounds);
+
     if (bodiesUnder.length > 0) {
-        const body = bodiesUnder[0];
+        // 最も指に近い body を選択する
+        let body = bodiesUnder[0];
+        let minDist = Vector.magnitude(Vector.sub(body.position, pos));
+        for (let i = 1; i < bodiesUnder.length; i++) {
+            const d = Vector.magnitude(Vector.sub(bodiesUnder[i].position, pos));
+            if(d < minDist) {
+                minDist = d;
+                body = bodiesUnder[i];
+            }
+        }
         
         // Check if visible (Frixion logic)
         if (body.render && body.render.opacity === 0) return;
@@ -266,9 +312,11 @@ function checkIntersection(pos) {
                 // Add
                 if (!connectedPath.includes(body)) {
                     const dist = Vector.magnitude(Vector.sub(body.position, lastInPath.position));
-                    const threshold = ACTIVE_SKILL.isKurutogaDrive ? ITEM_RADIUS * 6.0 : ITEM_RADIUS * 3.5;
+                    // しきい値を広げて遠くても吸い付くようにする
+                    const threshold = ACTIVE_SKILL.isKurutogaDrive ? ITEM_RADIUS * 6.5 : ITEM_RADIUS * 4.5;
                     if (dist < threshold) {
                         connectedPath.push(body);
+                        playScribbleSound(); // 鉛筆の音
                         
                         // If kurutoga drive, absorb immediately adjacent ones to the path
                         if (ACTIVE_SKILL.isKurutogaDrive) {
@@ -508,9 +556,27 @@ function updateUI() {
 
 // Spawner
 let spawnInterval;
+
+function spawnBulkItems(count) {
+    for(let i=0; i<count; i++) {
+        // 少しだけX座標を散らして一気に生成
+        setTimeout(() => spawnItem(), Math.random() * 50);
+    }
+}
+
 function startSpawning() {
     if(spawnInterval) clearInterval(spawnInterval);
-    spawnInterval = setInterval(() => spawnItem(), 150);
+    // 初期ドサっと落下
+    spawnBulkItems(MAX_ITEMS);
+    
+    spawnInterval = setInterval(() => {
+        const missing = MAX_ITEMS - items.length;
+        if(missing > 3) {
+            // 一気に补充
+            const count = Math.min(missing, 12);
+            spawnBulkItems(count);
+        }
+    }, 400); // チェック頻度
 }
 function stopSpawning() {
     if(spawnInterval) clearInterval(spawnInterval);
@@ -589,26 +655,38 @@ function render() {
         }
     });
     
-    // Path
-    if (connectedPath.length > 0) {
-        ctx.beginPath();
-        const start = connectedPath[0].position;
-        ctx.moveTo(start.x, start.y);
-        for(let i = 1; i < connectedPath.length; i++) {
-            const p = connectedPath[i].position;
-            ctx.lineTo(p.x, p.y);
-        }
-        if (isDragging) {
-            ctx.lineTo(lastPos.x, lastPos.y);
-        }
-        ctx.strokeStyle = ACTIVE_SKILL.isKurutogaDrive ? 'rgba(255, 100, 100, 0.9)' : 'rgba(255, 255, 255, 0.8)';
-        ctx.lineWidth = ACTIVE_SKILL.isKurutogaDrive ? 25 : (ACTIVE_SKILL.isMackeePaint ? 35 : 8);
+    // Path (鉛筆風の多重線)
+    if (connectedPath.length > 1) {
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.stroke();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-        ctx.shadowBlur = 5;
-        ctx.stroke();
+
+        const drawPath = (offset, width, alpha, color) => {
+            ctx.beginPath();
+            const start = connectedPath[0].position;
+            ctx.moveTo(start.x + offset.x, start.y + offset.y);
+            for(let i = 1; i < connectedPath.length; i++) {
+                const p = connectedPath[i].position;
+                ctx.lineTo(p.x + offset.x, p.y + offset.y);
+            }
+            ctx.lineWidth = width;
+            ctx.strokeStyle = color.replace('ALPHA', alpha);
+            ctx.stroke();
+        };
+
+        const baseColor = ACTIVE_SKILL.isKurutogaDrive ? 'rgba(220, 38, 38, ALPHA)' : 'rgba(30,30,30, ALPHA)';
+        
+        // 1. かすれた広い部分
+        drawPath({x:0, y:0}, 18, '0.2', baseColor);
+        
+        // 2. 複数の細い線を重ねて鉛筆の芯の質感を出す
+        for(let j=0; j<3; j++) {
+            const ox = (Math.random() - 0.5) * 4;
+            const oy = (Math.random() - 0.5) * 4;
+            drawPath({x:ox, y:oy}, 2 + Math.random() * 2, '0.4', baseColor);
+        }
+
+        // 3. メインの芯
+        drawPath({x:0, y:0}, 5, '0.8', baseColor);
     }
     
     // Mackee active hint
