@@ -39,18 +39,36 @@
                 <div id="goal-text" style="font-size:0.5rem; margin-top:2px; color:#00ff41;">0% 到着</div>
             </div>
 
-            <div class="stats-panel" style="text-align:right; width:120px;">
-                <div>ハックゲージ <span id="hack-percentage">0%</span></div>
-                <div id="hack-container" style="width:100%; height:6px; background:#002222; margin-top:4px;">
+            <div class="stats-panel" style="text-align:right; width:130px;">
+                <div style="font-size:0.7rem;">HACK (Compile) <span id="hack-percentage" style="color:#0ff;">0%</span>
+                </div>
+                <div id="hack-container" style="width:100%; height:6px; background:#002222; margin-top:2px;">
                     <div id="hack-bar" style="height:100%; background:#0ff; width:0%; transition:0.3s;"></div>
                 </div>
-                <div style="font-size:0.6rem; margin-top:5px;" id="hack-ready-text">(GATHERING_DATA)</div>
             </div>
 
             <!-- ビット数 -->
             <div class="stats-panel" style="width:100px; text-align:right;">
                 <div style="color: #00ff41; font-size: 0.6rem;">BITS</div>
                 <div id="bit-count" style="font-size: 1.2rem; font-family: 'Courier New', monospace;">0</div>
+            </div>
+        </div>
+
+        <!-- RIGHT HUD (ENERGY & SUB-MODE) -->
+        <div id="right-hud" style="position:absolute; top:20px; right:20px; z-index:100; text-align:right;">
+            <div class="stats-panel"
+                style="width:180px; background:rgba(0,20,10,0.8); border:1px solid #ffdd00; padding:10px;">
+                <div style="font-size:0.7rem; color:#ffdd00; margin-bottom:5px; font-weight:bold;">ENERGY (Summon)</div>
+                <div id="energy-container"
+                    style="width:100%; height:12px; background:#111; border:1px solid #444; overflow:hidden;">
+                    <div id="energy-bar"
+                        style="height:100%; background:linear-gradient(90deg, #ffaa00, #ffff00); width:0%; transition:0.2s;">
+                    </div>
+                </div>
+                <div id="subship-mode-display" style="margin-top:8px; font-size:0.7rem;">
+                    SUB_SUMMON: <span id="subship-mode-text" style="color:#0f4; font-weight:bold;">AUTO</span>
+                </div>
+                <div style="font-size:0.55rem; color:#888; margin-top:4px;">[SHIFT] キーでモード切替</div>
             </div>
         </div>
 
@@ -72,11 +90,15 @@
             style="position:absolute; bottom:80px; left:10px; width:200px; pointer-events:none; z-index:40;"></div>
 
         <!-- TOWER SKILL HUD -->
-        <div id="tower-skill-hud" class="hidden" style="position: absolute; bottom: 120px; right: 20px; text-align: right; pointer-events: none; z-index: 30;">
+        <div id="tower-skill-hud" class="hidden"
+            style="position: absolute; bottom: 120px; right: 20px; text-align: right; pointer-events: none; z-index: 30;">
             <div style="font-size: 0.6rem; color: #00ff41;">[ ACTIVE SKILL (KEY: S) ]</div>
-            <div id="tower-skill-name" style="font-size: 1.2rem; color: #fff; font-weight: bold; text-shadow: 0 0 5px #fff;">NO SKILL</div>
-            <div id="tower-skill-cooldown-container" style="width: 150px; height: 6px; background: rgba(0, 255, 65, 0.2); margin-top: 5px; float: right; border: 1px solid #00ff41;">
-                <div id="tower-skill-cooldown-bar" style="width: 100%; height: 100%; background: #00ff41; transition: 0.1s;"></div>
+            <div id="tower-skill-name"
+                style="font-size: 1.2rem; color: #fff; font-weight: bold; text-shadow: 0 0 5px #fff;">NO SKILL</div>
+            <div id="tower-skill-cooldown-container"
+                style="width: 150px; height: 6px; background: rgba(0, 255, 65, 0.2); margin-top: 5px; float: right; border: 1px solid #00ff41;">
+                <div id="tower-skill-cooldown-bar"
+                    style="width: 100%; height: 100%; background: #00ff41; transition: 0.1s;"></div>
             </div>
         </div>
 
@@ -84,7 +106,7 @@
         <div id="home-screen" class="overlay">
             <div id="home-main-content">
                 <h1 id="title-logo">ハッカー・シューター<span>// SYSTEM_CONNECTED: ACCESS_GRANTED</span></h1>
-                
+
                 <div class="stats-overview">
                     <div id="best-time">RECORD: <span id="best-value">00:00</span></div>
                     <div class="bit-count-display">BIT: <span id="home-bit-count">0</span> BIT</div>
@@ -94,10 +116,13 @@
                     <div id="mode-info-display">
                         <div id="selected-mode-title">SELECT_MODE</div>
                         <div id="selected-mode-desc">下のメニューからモードを選択してください。</div>
-                        <div id="selected-mode-meta" style="font-size: 0.55rem; color: #008f11; margin-top: 10px; font-family: monospace;"></div>
+                        <div id="selected-mode-meta"
+                            style="font-size: 0.55rem; color: #008f11; margin-top: 10px; font-family: monospace;"></div>
                     </div>
-                    
-                    <button id="execute-start-btn" class="btn-primary hidden" style="margin-top:20px; width:200px; background:#00ff41; color:#000; font-weight:bold; font-size:1.2rem; box-shadow:0 0 20px rgba(0,255,65,0.4);">[ EXECUTE ]</button>
+
+                    <button id="execute-start-btn" class="btn-primary hidden"
+                        style="margin-top:20px; width:200px; background:#00ff41; color:#000; font-weight:bold; font-size:1.2rem; box-shadow:0 0 20px rgba(0,255,65,0.4);">[
+                        EXECUTE ]</button>
                 </div>
             </div>
 
@@ -196,11 +221,12 @@
                 <!-- パレットエリア (タブ切り替え制) -->
                 <div class="palette-area" style="flex: 2; border: none; background: transparent; padding: 0;">
                     <div class="palette-tabs">
-                        <button class="hack-tab active" data-tab="attack" onclick="switchTab('attack')">ATTACK</button>
-                        <button class="hack-tab" data-tab="buff" onclick="switchTab('buff')">BUFF</button>
-                        <button class="hack-tab" data-tab="system" onclick="switchTab('system')">SYSTEM</button>
-                        <button class="hack-tab" data-tab="logic" onclick="switchTab('logic')">LOGIC</button>
-                        <button class="hack-tab" data-tab="data" onclick="switchTab('data')">DATA</button>
+                        <button class="hack-tab active" data-tab="red" onclick="switchTab('red')">RED</button>
+                        <button class="hack-tab" data-tab="blue" onclick="switchTab('blue')">BLUE</button>
+                        <button class="hack-tab" data-tab="yellow" onclick="switchTab('yellow')">YELLOW</button>
+                        <button class="hack-tab" data-tab="green" onclick="switchTab('green')">GREEN</button>
+                        <button class="hack-tab" data-tab="purple" onclick="switchTab('purple')">PURPLE</button>
+                        <button class="hack-tab" data-tab="white" onclick="switchTab('white')">WHITE</button>
                     </div>
                     <div id="unified-palette" class="palette-column"
                         style="height: calc(100% - 35px); border-radius: 0 0 4px 4px; border-top: none;">
@@ -241,8 +267,11 @@
 
         <!-- TOWER FLOOR SELECT -->
         <div id="tower-floor-select" class="overlay hidden">
-            <h2 style="color:#f0f; text-shadow:0 0 10px #f0f;">FLOOR_SELECT // <span id="tower-floor-num">F01</span></h2>
-            <div style="font-size: 0.8rem; color: #00ff41; margin-bottom: 10px; font-weight: bold;">AVAILABLE BITS: <span id="tower-floor-bits">0</span></div>
+            <h2 style="color:#f0f; text-shadow:0 0 10px #f0f;">FLOOR_SELECT // <span id="tower-floor-num">F01</span>
+            </h2>
+            <div style="font-size: 0.8rem; color: #00ff41; margin-bottom: 10px; font-weight: bold;">AVAILABLE BITS:
+                <span id="tower-floor-bits">0</span>
+            </div>
             <div class="tower-layout">
                 <div id="floor-options-container">
                     <!-- JSで生成 -->
@@ -252,34 +281,50 @@
                 </div>
             </div>
             <div id="tower-reroll-container" style="margin-top: 20px;">
-                <button id="tower-reroll-btn" style="background: rgba(40, 40, 0, 0.8); border: 2px solid #ffaa00; color: #ffaa00; padding: 10px 20px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 0 10px rgba(255,170,0,0.3);">
+                <button id="tower-reroll-btn"
+                    style="background: rgba(40, 40, 0, 0.8); border: 2px solid #ffaa00; color: #ffaa00; padding: 10px 20px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 0 10px rgba(255,170,0,0.3);">
                     [ REROLL OPTIONS (-100 BITS) ]
                 </button>
             </div>
         </div>
 
-        <!-- TOWER PERMANENT HACKING -->
+        <!-- OPERATING INSTRUCTIONS (FORMERLY META HACK) -->
         <div id="tower-meta-hack" class="modal hidden">
-            <div class="modal-header">永続強化セッション [META_UPGRADE]</div>
-            <div style="padding:20px;">
-                <div id="meta-hack-bits" style="color:#00ff41; font-family:monospace; margin-bottom:10px;">AVAILABLE_BITS: 0</div>
-                <div id="meta-upgrade-list" style="display:flex; flex-direction:column; gap:10px;">
-                    <!-- JSで生成 -->
+            <div class="modal-header">操作説明ガイド [OPERATING_INSTRUCTIONS]</div>
+            <div style="padding:20px; color:#00ff41; font-family:monospace; line-height:1.6;">
+                <div
+                    style="border-bottom:1px solid #00ff41; padding-bottom:10px; margin-bottom:15px; font-size:1.1rem; color:#fff;">
+                    >> システム制御コマンド
+                </div>
+                <ul style="list-style:none; padding:0; font-size:0.9rem;">
+                    <li><span style="color:#0ff;">[SPACE]</span> : スレッド射出 (最大3接続)</li>
+                    <li><span style="color:#0ff;">[S] キー</span> : コンパイル (接続中の敵を一斉爆破)</li>
+                    <li><span style="color:#ffdd00;">[SHIFT] キー</span> : 召喚モード切替 (オート / 手動)</li>
+                    <li><span style="color:#ffdd00;">[A] キー</span> : サブ機召喚 (手動モード時・EN 50消費)</li>
+                    <li><span style="color:#fff;">[C] キー</span> : ハッキングメニュー (強化ブロック装備)</li>
+                    <li><span style="color:#888;">[ESC / P]</span> : 一時停止</li>
+                </ul>
+                <div style="margin-top:20px; font-size:0.75rem; color:#008f11;">
+                    ※ 自機は固定砲台です。マウスで狙いを定め、敵からエネルギーを吸い取り、コンパイルで一掃してください。
                 </div>
             </div>
-            <button class="close-modal" onclick="closeTowerMetaHack()">戻る [RETURN]</button>
+            <button class="close-modal" onclick="closeTowerMetaHack()">閉じる [CLOSE]</button>
         </div>
 
         <!-- TOWER SHOP SCREEN -->
         <div id="tower-shop-screen" class="overlay hidden">
             <h2 style="color:#0ff; text-shadow:0 0 10px #0ff;">REST_SHOP // SYSTEM_RESTORE</h2>
-            <div style="font-size: 0.8rem; color: #00ff41; margin-bottom: 20px; font-weight: bold;">AVAILABLE BITS: <span id="shop-bits">0</span></div>
-            
-            <div id="shop-items-container" style="display: flex; gap: 20px; justify-content: center; margin-bottom: 30px; flex-wrap: wrap;">
+            <div style="font-size: 0.8rem; color: #00ff41; margin-bottom: 20px; font-weight: bold;">AVAILABLE BITS:
+                <span id="shop-bits">0</span>
+            </div>
+
+            <div id="shop-items-container"
+                style="display: flex; gap: 20px; justify-content: center; margin-bottom: 30px; flex-wrap: wrap;">
                 <!-- Items generated by JS -->
             </div>
-            
-            <button id="shop-leave-btn" style="background: rgba(0, 0, 0, 0.8); border: 2px solid #aaa; color: #aaa; padding: 10px 20px; font-weight: bold; cursor: pointer; transition: 0.2s;">
+
+            <button id="shop-leave-btn"
+                style="background: rgba(0, 0, 0, 0.8); border: 2px solid #aaa; color: #aaa; padding: 10px 20px; font-weight: bold; cursor: pointer; transition: 0.2s;">
                 [ LEAVE SHOP (NEXT FLOOR) ]
             </button>
         </div>

@@ -14,6 +14,7 @@ const CLEAR_TIME = 180; // 3分でゴール到達
 // --- 2. ゲーム状態 ---
 let hp = MAX_HP;
 let hackGauge = 0;
+let energyGauge = 0; // 追加: 専用エネルギーゲージ
 let score = 0;
 let playerBits = parseInt(localStorage.getItem('hacker_shooter_bits')) || 0;
 let startTime = 0;
@@ -90,6 +91,7 @@ let player = {
 let bullets = [];
 let enemyBullets = [];
 let enemies = [];
+let threads = []; // 追加: スレッド(糸)の配列
 let bits = []; // 獲得アイテム
 let particles = [];
 let vortices = []; // Grabi用
@@ -192,7 +194,7 @@ class TowerManager {
             const color = colors[Math.floor(Math.random() * colors.length)];
             const rewardPool = BLOCKS.filter(b => b.isTowerChip);
             const rewardBlock = rewardPool[Math.floor(Math.random() * rewardPool.length)];
-            
+
             // 難易度別のビット報酬 (上方調整)
             let rewardBits = 200;
             if (diff === 'NORMAL') rewardBits = 500;
@@ -214,7 +216,7 @@ class TowerManager {
         towerState.currentTrouble = option.trouble;
         towerState.pendingReward = option.rewardBlockId;
         towerState.pendingBits = option.rewardBits || 0;
-        
+
         if (option.type === 'shop') {
             gameActive = false;
             towerState.currentTrouble = null;
@@ -229,18 +231,33 @@ class TowerManager {
         gameOver = false;
         hp = towerState.permanentUpgrades.maxHP;
         score = 0;
+        towerState.dominatedCount = 0;
+        towerState.dominationGoal = 10 + Math.min(40, towerState.currentFloor * 2); // 支配目標
+        if (option.difficulty === 'HARD') towerState.dominationGoal += 5;
+
         startTime = Date.now();
         lastTime = Date.now();
-        
+
+        // 演出用タイマー
+        towerState.startAnimTimer = 180; // 3秒間
+        towerState.isClearing = false;
+
         // オブジェクトのクリア
         enemies = []; bullets = []; enemyBullets = []; bits = []; particles = []; vortices = [];
         turrets = []; decoys = []; portals = []; lightningStrikes = []; towerMissiles = [];
-        
+        player.subShips = 0;
+
+        // 即座にボスを配置
+        const hpMultiplier = (1 + (towerState.currentFloor - 1) * 0.5);
+        const names = ["ROOT_ADMIN", "SECURITY_CORE", "SYSTEM_KERNEL"];
+        const boss = new Boss(500 * hpMultiplier, names[(towerState.currentFloor - 1) % 3]);
+        enemies.push(boss);
+
         // モジュールとステータスの同期
         player.activeModules = JSON.parse(JSON.stringify(hackingStack));
         applyStaticStats();
         applyDynamicLogic();
-        
+
         // UI遷移
         document.getElementById('home-screen').classList.add('hidden');
         document.getElementById('tower-floor-select').classList.add('hidden');
@@ -248,13 +265,13 @@ class TowerManager {
         document.getElementById('side-hud').classList.remove('hidden');
         document.getElementById('controls-guide').classList.remove('hidden');
         document.getElementById('clear-screen').classList.add('hidden');
-        
+
         updateUI();
-        
+
         // トラブルフロア演出
         console.log("Starting floor:", option);
         addLog(`FLOOR_${towerState.currentFloor}_START: ${option.difficulty}`, "hack");
-        
+
         closeOverlays();
     }
 
@@ -263,7 +280,7 @@ class TowerManager {
         towerState.currentFloor++;
         towerState.bits = playerBits;
         towerState.lives = player.lives; // 残数を保存
-        
+
         // ビット報酬の付与
         if (towerState.pendingBits) {
             playerBits += towerState.pendingBits;
@@ -357,189 +374,66 @@ canvas.addEventListener('touchmove', e => {
 
 // --- 5. UI更新・ハッキング画面ロジック ---
 const CATEGORIES = {
-    MAIN: 'main',
-    SKILL: 'skill',
-    PASSIVE: 'passive',
-    SYSTEM: 'system',
+    RED: 'red',
+    BLUE: 'blue',
+    YELLOW: 'yellow',
+    GREEN: 'green',
+    PURPLE: 'purple',
+    WHITE: 'white',
     LOGIC: 'logic',
     COND: 'cond',
     NUM: 'num',
-    OBJECT: 'object',
-    PARAM: 'data' // 当てはめる系 (数字・オブジェクト)
+    PARAM: 'data'
 };
 
 const BLOCKS = [
-    // 1. ロジックブロック (制御構文)
-    { id: 'logic-if', category: CATEGORIES.LOGIC, label: 'IF [ {c} ] THEN [ {a} ]', desc: '条件を満たす時のみ実行', hasCond: true, hasAction: true, icon: '⚙️' },
-    { id: 'logic-while', category: CATEGORIES.LOGIC, label: 'WHILE [ {c} ] LOOP [ {a} ]', desc: '条件を満たす間、継続実行', hasCond: true, hasAction: true, icon: '🔄' },
+    // --- 【赤：コンパイル系統】（ドカンと倒す） ---
+    { id: 'chip-red-dmg', category: CATEGORIES.RED, label: '[ 威力アップ ]', desc: 'コンパイルの一斉攻撃ダメージ上昇', isTowerChip: true, color: '#ff4444', icon: '🔺' },
+    { id: 'chip-red-range', category: CATEGORIES.RED, label: '[ 爆発サイズ ]', desc: 'コンパイル時の爆風範囲拡大', isTowerChip: true, color: '#ff4444', icon: '💥' },
+    { id: 'chip-red-rate', category: CATEGORIES.RED, label: '[ 連鎖速度 ]', desc: '糸を伝わってダメージが波及する速度上昇', isTowerChip: true, color: '#ff4444', icon: '⚡' },
+    { id: 'chip-red-crit', category: CATEGORIES.RED, label: '[ クリティカル ]', desc: '確率でコンパイルダメージが2倍', isTowerChip: true, color: '#ff4444', icon: '🎯' },
+    { id: 'chip-red-follow', category: CATEGORIES.RED, label: '[ 追撃 ]', desc: 'コンパイル後、生き残った敵に小ダメージ', isTowerChip: true, color: '#ff4444', icon: '👹' },
 
-    // 2. 条件ブロック
-    { id: 'cond-hp-low', category: CATEGORIES.COND, label: 'HPが50%未満', desc: '体力が半分以下の時', icon: '📉' },
-    { id: 'cond-gauge-max', category: CATEGORIES.COND, label: 'ハックゲージが100%', desc: 'ゲージが最大の時', icon: '⚡' },
-    { id: 'cond-enemy-near', category: CATEGORIES.COND, label: '近くに敵がいる', desc: '200px以内に敵がいる時', icon: '🎯' },
-    { id: 'cond-always', category: CATEGORIES.COND, label: '常時有効', desc: '無条件で有効', icon: '♾️' },
-    { id: 'cond-on-touch', category: CATEGORIES.COND, label: '[ {o1} ] が [ {o2} ] に触れた時', desc: '指定のオブジェクト同士が触れた瞬間にトリガー', hasObject1: true, hasObject2: true, icon: '🛑' },
+    // --- 【青：スレッド系統】（たくさん繋ぐ） ---
+    { id: 'chip-blue-count', category: CATEGORIES.BLUE, label: '[ 同時接続数 ]', desc: '一度に伸ばせる糸の本数増加', isTowerChip: true, color: '#4444ff', icon: '🧶' },
+    { id: 'chip-blue-length', category: CATEGORIES.BLUE, label: '[ 糸の長さ ]', desc: '遠くの敵まで糸が届く', isTowerChip: true, color: '#4444ff', icon: '📏' },
+    { id: 'chip-blue-width', category: CATEGORIES.BLUE, label: '[ 糸の太さ ]', desc: '糸の当たり判定が広がり巻き込みやすくなる', isTowerChip: true, color: '#4444ff', icon: '〰️' },
+    { id: 'chip-blue-speed', category: CATEGORIES.BLUE, label: '[ 発射速度 ]', desc: '糸が前方に伸びるスピード上昇', isTowerChip: true, color: '#4444ff', icon: '⏩' },
+    { id: 'chip-blue-homing', category: CATEGORIES.BLUE, label: '[ 自動追尾 ]', desc: '糸が近くの敵へ自動でカーブして繋がる', isTowerChip: true, color: '#4444ff', icon: '🛰️' },
 
-    // 0. パラメータ・オブジェクトブロック (新分類)
-    { id: 'obj-player', category: CATEGORIES.PARAM, label: '自機', desc: 'プレイヤー自身', memory: 40, icon: '🚀' },
-    { id: 'obj-enemy', category: CATEGORIES.PARAM, label: '敵機', desc: 'エネミーオブジェクト', memory: 40, icon: '👾' },
-    { id: 'obj-bullet', category: CATEGORIES.PARAM, label: '弾', desc: '攻撃オブジェクト', memory: 40, icon: '🔫' },
-    { id: 'obj-blackhole', category: CATEGORIES.PARAM, label: 'ブラックホール', desc: '重力オブジェクト', memory: 40, icon: '🌀' },
-    { id: 'obj-bit', category: CATEGORIES.PARAM, label: 'ビット', desc: '通貨・アイテム', memory: 40, icon: '💎' },
+    // --- 【黄：ドレイン系統】（エネルギーを吸う） ---
+    { id: 'chip-yellow-drain', category: CATEGORIES.YELLOW, label: '[ 吸収スピード ]', desc: '敵からHP/パワーを吸い取る速度上昇', isTowerChip: true, color: '#ffff44', icon: '💉' },
+    { id: 'chip-yellow-slow', category: CATEGORIES.YELLOW, label: '[ 弱体化 ]', desc: '繋がれた敵の移動速度低下', isTowerChip: true, color: '#ffff44', icon: '⏬' },
+    { id: 'chip-yellow-atkdown', category: CATEGORIES.YELLOW, label: '[ 攻撃弱体化 ]', desc: '繋がれた敵の攻撃力低下', isTowerChip: true, color: '#ffff44', icon: '📉' },
+    { id: 'chip-yellow-defdown', category: CATEGORIES.YELLOW, label: '[ 防御弱体化 ]', desc: '繋がれた敵の防御力低下（被ダメ増）', isTowerChip: true, color: '#ffff44', icon: '💔' },
+    { id: 'chip-yellow-regen', category: CATEGORIES.YELLOW, label: '[ リジェネ ]', desc: '敵と繋がっている間、自分のHPが回復', isTowerChip: true, color: '#ffff44', icon: '💖' },
 
-    // 3. 攻撃の拡張（メインウェポン）
-    { id: 'main-shot-count', category: CATEGORIES.MAIN, label: '弾の数を [ {p} ] 方向にする', desc: '扇状に広がるショットへの強化', hasParam: true, paramType: 'options', options: [1, 3, 5], defaultParam: 1, icon: '🔫' },
-    { id: 'main-homing', category: CATEGORIES.MAIN, label: '弾を [ 追尾弾 ] に変える', desc: '敵を自動で追いかける弾', hasParam: false, icon: '🎯' },
-    { id: 'main-laser', category: CATEGORIES.MAIN, label: '弾を [ レーザー ] に変える', desc: '一瞬で端まで届く貫通光線', hasParam: false, icon: '⚡' },
-    { id: 'main-bomb', category: CATEGORIES.MAIN, label: '弾を [ ボム ] に変える', desc: '着弾時に爆発して周囲を巻き込む', hasParam: false, icon: '💣' },
-    { id: 'main-rear', category: CATEGORIES.MAIN, label: '弾を [ 後ろ ] にも撃つ', desc: '背後の敵への対策', hasParam: false, icon: '↩️' },
-    { id: 'main-speed', category: CATEGORIES.MAIN, label: '弾の [ 速さ ] を [ {p} ] ％上げる', desc: '弾速アップ', hasParam: true, paramType: 'number', defaultParam: 10, maxParam: 100, icon: '🏃' },
-    { id: 'main-size', category: CATEGORIES.MAIN, label: '弾の [ 大きさ ] を [ {p} ] ％上げる', desc: '当たり判定の拡大', hasParam: true, paramType: 'number', defaultParam: 20, maxParam: 200, icon: '💠' },
+    // --- 【緑：リソース系統】（お宝を稼ぐ） ---
+    { id: 'chip-green-bit', category: CATEGORIES.GREEN, label: '[ ビット増加 ]', desc: '敵撃破時の獲得ビット量増加', isTowerChip: true, color: '#44ff44', icon: '💰' },
+    { id: 'chip-green-magnet', category: CATEGORIES.GREEN, label: '[ アイテム回収 ]', desc: '離れたビットを自動で自機に引き寄せる', isTowerChip: true, color: '#44ff44', icon: '🧲' },
+    { id: 'chip-green-drop', category: CATEGORIES.GREEN, label: '[ ドロップ率 ]', desc: '敵が回復アイテムなどを落とす確率UP', isTowerChip: true, color: '#44ff44', icon: '🎁' },
+    { id: 'chip-green-cost', category: CATEGORIES.GREEN, label: '[ コスト削減 ]', desc: 'ブロック装備の全体メモリ負荷低下', isTowerChip: true, color: '#44ff44', icon: '📉' },
+    { id: 'chip-green-save', category: CATEGORIES.GREEN, label: '[ 弾数節約 ]', desc: '糸やコンパイル時に確率でリソース消費なし', isTowerChip: true, color: '#44ff44', icon: '♻️' },
 
-    // 4. 特殊スキル（サブウェポン・必殺技）
-    { id: 'skill-barrier', category: CATEGORIES.SKILL, label: '[ バリア ] を展開する', desc: '敵の弾を一定時間防ぐ', hasParam: false, icon: '🛡️' },
-    { id: 'skill-option', category: CATEGORIES.SKILL, label: '[ オプション ] を [ {p} ] 個つける', desc: '自機の横で一緒に撃ってくれるミニ機体', hasParam: true, paramType: 'number', defaultParam: 1, maxParam: 5, icon: '🛰️' },
-    { id: 'skill-all-bomb', category: CATEGORIES.SKILL, label: '[ 画面全体ボム ] を使う', desc: '画面上の敵弾をすべて消去', hasParam: false, icon: '💥' },
-    { id: 'skill-damage-enemy', category: CATEGORIES.SKILL, label: '敵機に [ 全体ダメージ ] を与える', desc: '画面上の敵すべてにダメージ', hasParam: false, icon: '💣' },
-    { id: 'skill-time-stop', category: CATEGORIES.SKILL, label: '[ 時間を止める ]', desc: '数秒間、自分以外の動きを停止させる', hasParam: false, icon: '⏳' },
-    { id: 'skill-invincible', category: CATEGORIES.SKILL, label: '[ 無敵状態 ] になる', desc: '一定時間、体当たりで敵を破壊可能', hasParam: false, icon: '👻' },
+    // --- 【紫：バグ系統】（ジャマをする） ---
+    { id: 'chip-purple-stun', category: CATEGORIES.PURPLE, label: '[ ビリビリ ]', desc: '繋いだ敵を確率で麻痺させて移動停止', isTowerChip: true, color: '#ff44ff', icon: '⚡' },
+    { id: 'chip-purple-poison', category: CATEGORIES.PURPLE, label: '[ どく ]', desc: '繋がっている間、敵HPにスリップダメージ', isTowerChip: true, color: '#ff44ff', icon: '☠️' },
+    { id: 'chip-purple-knockback', category: CATEGORIES.PURPLE, label: '[ ふきとばし ]', desc: 'コンパイル時、周囲の敵を大きくノックバック', isTowerChip: true, color: '#ff44ff', icon: '💨' },
+    { id: 'chip-purple-warp', category: CATEGORIES.PURPLE, label: '[ ワープ ]', desc: 'コンパイル時、敵をランダムな位置へテレポート', isTowerChip: true, color: '#ff44ff', icon: '🌀' },
+    { id: 'chip-purple-burn', category: CATEGORIES.PURPLE, label: '[ 炎上 ]', desc: 'コンパイル後も敵が一定時間燃えてダメージ', isTowerChip: true, color: '#ff44ff', icon: '🔥' },
 
-    // ... (Passive and System remain mapped by their IDs later)
-
-    // 3. 機体性能（パッシブ・常時発動）
-    { id: 'passive-hitbox', category: CATEGORIES.PASSIVE, label: '[ 当たり判定 ] を小さくする', desc: '敵の弾を避けやすくする', hasParam: false, icon: '💠' },
-    { id: 'passive-magnet', category: CATEGORIES.PASSIVE, label: '[ マグネット ] 機能をオンにする', desc: '落ちているアイテムを自動回収', hasParam: false, icon: '🧲' },
-    { id: 'passive-auto-heal', category: CATEGORIES.PASSIVE, label: '[ 自動回復 ] 機能をオンにする', desc: '時間経過で体力が回復', hasParam: false, icon: '💊' },
-    { id: 'passive-lives', category: CATEGORIES.PASSIVE, label: '[ 残機 ] を [ {p} ] 増やす', desc: 'コンティニュー回数の増加', hasParam: true, paramType: 'number', defaultParam: 1, maxParam: 5, icon: '➕' },
-    { id: 'passive-exp', category: CATEGORIES.PASSIVE, label: '[ 経験値ボーナス ] を [ {p} ] 倍にする', desc: 'レベルアップ速度の向上', hasParam: true, paramType: 'number', defaultParam: 2, maxParam: 10, icon: '💎' },
-
-    // 4. システム改造（特殊ルール）
-    { id: 'system-coin', category: CATEGORIES.SYSTEM, label: '敵の弾を [ コイン ] に変える', desc: 'ピンチをチャンスに変える変換機能', hasParam: false, icon: '💰' },
-    { id: 'system-explode', category: CATEGORIES.SYSTEM, label: '敵が倒れたときに [ 爆発 ] させる', desc: '連鎖爆破で敵を一掃', hasParam: false, icon: '🧨' },
-    { id: 'system-slow', category: CATEGORIES.SYSTEM, label: '[ スローモーション ] モードにする', desc: '弾幕を避けやすくする', hasParam: false, icon: '⏬' },
-    { id: 'system-endure', category: CATEGORIES.SYSTEM, label: '[ くいしばり ] を発動する', desc: '一度だけHP1で耐える', hasParam: false, icon: '✊' },
-    { id: 'system-auto-fire', category: CATEGORIES.SYSTEM, label: '[ オートエイム ] をオンにする', desc: '自動で敵を狙って撃つ', hasParam: false, icon: '🤖' },
-
-    // 5. 数字ブロック (新分類)
-    { id: 'num-1', category: CATEGORIES.PARAM, label: '1', value: 1, maxUsage: 10, icon: '1️⃣' },
-    { id: 'num-3', category: CATEGORIES.PARAM, label: '3', value: 3, maxUsage: 10, icon: '3️⃣' },
-    { id: 'num-5', category: CATEGORIES.PARAM, label: '5', value: 5, maxUsage: 10, icon: '5️⃣' },
-    { id: 'num-10', category: CATEGORIES.PARAM, label: '10', value: 10, maxUsage: 10, icon: '🔟' },
-    { id: 'num-20', category: CATEGORIES.PARAM, label: '20', value: 20, maxUsage: 10, icon: '📈' },
-    { id: 'num-50', category: CATEGORIES.PARAM, label: '50', value: 50, maxUsage: 10, icon: '⏫' },
-    { id: 'num-100', category: CATEGORIES.PARAM, label: '100', value: 100, maxUsage: 10, icon: '💯' },
-
-    // --- 追加ブロック ---
-    { id: 'cond-on-hit', category: CATEGORIES.COND, label: '弾が敵にあたったとき', desc: '命中時に一時的に有効化', icon: '🎯' },
-    { id: 'passive-blackhole', category: CATEGORIES.PASSIVE, label: 'ブラックホールを設置する', desc: '敵を吸い寄せ、弾を消去する', icon: '🌀' },
-    { id: 'skill-subship-adv', category: CATEGORIES.SKILL, label: '高度サブ機を追加する', desc: '自律的に敵を狙う強化型ミニ機体', icon: '🛸' },
-    { id: 'system-bit-double', category: CATEGORIES.SYSTEM, label: 'ビットを倍にする', desc: '敵が落とすビットの量が2倍になる', icon: '📈' },
-
-    // --- 1. 弾の性質を変える (BASE) ---
-    { id: 'base-piercing', category: CATEGORIES.MAIN, label: '弾を [ 貫通 ] にする', desc: '敵を一通りの敵にも当たるようにする', icon: '🏹' },
-    { id: 'base-stationary', category: CATEGORIES.MAIN, label: '弾を [ 設置 ] にする', desc: '撃った場所にしばらく留まる', icon: '📍' },
-    { id: 'base-splitting', category: CATEGORIES.MAIN, label: '弾を [ 分裂 ] させる', desc: '敵にあたると分裂して飛ぶ', icon: '🌿' },
-    { id: 'base-bouncing', category: CATEGORIES.MAIN, label: '弾を [ バウンド ] させる', desc: '画面端で跳ね返る', icon: '🏀' },
-
-    // --- 2. 弾の動き・形を変える (FORM) ---
-    { id: 'form-rotating', category: CATEGORIES.MAIN, label: '弾を [ 回転 ] させる', desc: '自機の周りを旋回する', icon: '🔄' },
-    { id: 'form-growing', category: CATEGORIES.MAIN, label: '弾を [ 巨大化 ] させる', desc: '弾のサイズが大きくなる', icon: '📈' },
-    { id: 'form-boomerang', category: CATEGORIES.MAIN, label: '弾を [ 往復 ] させる', desc: '一定距離で戻ってくる', icon: '🪃' },
-    { id: 'form-accel', category: CATEGORIES.MAIN, label: '弾を [ 時間差加速 ] させる', desc: '途中でスピードが上がる', icon: '⏩' },
-    { id: 'form-wave', category: CATEGORIES.MAIN, label: '弾を [ 波形 ] にする', desc: '上下に揺れながら進む', icon: '〰️' },
-
-    // --- 3. 特殊な付加価値 (EFFECT) ---
-    { id: 'effect-explosion', category: CATEGORIES.SKILL, label: '[ 爆発 ] を起こす', desc: '着弾時に爆発する', icon: '💥' },
-    { id: 'effect-attract', category: CATEGORIES.SKILL, label: '[ 吸い寄せ ]', desc: '近くの敵やアイテムを吸い寄せる', icon: '🧲' },
-    { id: 'effect-chain', category: CATEGORIES.SKILL, label: '[ 電撃 ]', desc: '隣の敵にもダメージが広がる', icon: '⚡' },
-    { id: 'effect-freeze', category: CATEGORIES.SKILL, label: '[ 凍結 ]', desc: '敵の動きを数秒止める', icon: '❄️' },
-    { id: 'effect-poison', category: CATEGORIES.SKILL, label: '[ 毒 ]', desc: 'じわじわ体力を削る', icon: '☠️' },
-
-    // --- 新規追加ブロック (Request) ---
-    { id: 'effect-chain-adv', category: CATEGORIES.SKILL, label: '[ 連鎖 ]', desc: '敵から敵へ攻撃が飛び移る', icon: '⚡⚡' },
-    { id: 'main-gravity', category: CATEGORIES.MAIN, label: '[ 重力弾 ]', desc: '敵を吸い寄せながら進む', icon: '🕳️' },
-    { id: 'main-reflect', category: CATEGORIES.MAIN, label: '[ 反射レーザー ]', desc: '画面端で5回まで跳ね返る', icon: '💎' },
-    { id: 'skill-turret', category: CATEGORIES.SKILL, label: '[ 設置タレット ]', desc: 'その場に留まり弾を連射する', icon: '🗼' },
-    { id: 'skill-decoy', category: CATEGORIES.SKILL, label: '[ デコイ ]', desc: '敵の狙いをそらす分身を出す', icon: '🤡' },
-    { id: 'skill-blade', category: CATEGORIES.SKILL, label: '[ 近接ブレード ]', desc: '目の前の弾を消しながら斬る', icon: '🗡️' },
-    { id: 'system-hacking', category: CATEGORIES.SYSTEM, label: '[ ハッキング ]', desc: '敵の弾を自分の弾に変える', icon: '📥' },
-    { id: 'effect-shrink', category: CATEGORIES.SKILL, label: '[ 縮小化 ]', desc: '当たった敵を小さく弱くする', icon: '🤏' },
-    { id: 'skill-portal', category: CATEGORIES.SKILL, label: '[ ポータル ]', desc: '入り口から入った弾が出口から出る', icon: '🚪' },
-    { id: 'system-fireworks', category: CATEGORIES.SYSTEM, label: '[ 花火 ]', desc: '敵を倒した時に爆発四散させる', icon: '🎆' },
-    { id: 'effect-lightning', category: CATEGORIES.SKILL, label: '[ 雷撃 ]', desc: '着弾地点に雷を落とす', icon: '⚡🌋' },
-    // --- 新規追加アドバンスド・コンボ用 ---
-    { id: 'main-drill', category: CATEGORIES.MAIN, label: '[ ドリル ]', desc: '多段ヒットする重い弾', icon: '🔩' },
-    { id: 'passive-blood-pact', category: CATEGORIES.PASSIVE, label: '[ 決死の覚悟 ]', desc: 'HPを常時消費し、弾の威力とサイズを3倍にする', icon: '🩸' },
-
-    // --- Phase 2: NEW BLOCKS ---
-    { id: 'effect-echo', category: CATEGORIES.SKILL, label: '[ 残響 ]', desc: '敵を倒すと衝撃波が発生し、周囲の敵を被ダメージ1.5倍にする', icon: '📡' },
-    { id: 'system-binary-trade', category: CATEGORIES.SYSTEM, label: '[ 等価交換 ]', desc: '射撃時にビットを消費。ビットが偶数なら威力UP、奇数なら弾数UP', icon: '⚖️' },
-    { id: 'main-compress', category: CATEGORIES.MAIN, label: '[ 圧縮 ]', desc: '長押しでチャージし、超高密度弾を放つ', icon: '💎' },
-    { id: 'main-latency', category: CATEGORIES.MAIN, label: '[ 遅延 ]', desc: '貫通弾の軌跡が数秒後に爆発する', icon: '⏱️' },
-    { id: 'skill-synchro', category: CATEGORIES.SKILL, label: '[ 同期 ]', desc: '画面内に弾が5発以上あるとき、全弾が敵をホーミングする', icon: '🔗' },
-    { id: 'effect-malware', category: CATEGORIES.SKILL, label: '[ 浸食 ]', desc: '敵にノイズを蓄積させ、一定量で敵の攻撃を自爆に変える', icon: '🦠' },
-    { id: 'effect-repel', category: CATEGORIES.SKILL, label: '[ 反発 ]', desc: '自分の弾が敵の弾を弾き飛ばす', icon: '🧲', maxUsage: 2 },
-    { id: 'system-reboot', category: CATEGORIES.SYSTEM, label: '[ 再起動 ]', desc: '敵撃破で1秒無敵になるが、その間攻撃不能', icon: '♻️', maxUsage: 1 },
-    { id: 'system-random', category: CATEGORIES.SYSTEM, label: '[ 乱数 ]', desc: '弾の威力・速度・サイズがランダムに変動する', icon: '🎲', maxUsage: 1 },
-
-    // --- 【赤：破壊系統】（攻撃力・殲滅力） ---
-    { id: 'chip-red-dmg', category: CATEGORIES.MAIN, label: '[ 威力アップ ]', desc: '基礎ダメージが増加。', isTowerChip: true, color: '#ff4444', icon: '🔺' },
-    { id: 'chip-red-range', category: CATEGORIES.SKILL, label: '[ 爆発範囲 ]', desc: '着弾時の爆風が拡大。', isTowerChip: true, color: '#ff4444', icon: '💥' },
-    { id: 'chip-red-rate', category: CATEGORIES.MAIN, label: '[ 連射速度 ]', desc: '発射間隔を短縮。', isTowerChip: true, color: '#ff4444', icon: '⚡' },
-    { id: 'chip-red-crit', category: CATEGORIES.MAIN, label: '[ 会心の一撃 ]', desc: '確率でダメージが3倍。', isTowerChip: true, color: '#ff4444', icon: '🎯' },
-    { id: 'chip-red-boss', category: CATEGORIES.MAIN, label: '[ 対ボス火力 ]', desc: 'ボスへのダメージが大幅アップ。', isTowerChip: true, color: '#ff4444', icon: '👹' },
-    { id: 'chip-red-frag', category: CATEGORIES.SKILL, label: '[ 破片飛散 ]', desc: '敵に当たると破片が散る。', isTowerChip: true, color: '#ff4444', icon: '✨' },
-    { id: 'chip-red-burn', category: CATEGORIES.SKILL, label: '[ 残火発生 ]', desc: '着弾地点にダメージ床。', isTowerChip: true, color: '#ff4444', icon: '🔥' },
-
-    // --- 【青：機動力・弾幕】（攻撃範囲・特殊弾） ---
-    { id: 'chip-blue-homing', category: CATEGORIES.MAIN, label: '[ 追尾機能 ]', desc: '弾が敵を自動追尾。', isTowerChip: true, color: '#4444ff', icon: '🛰️' },
-    { id: 'chip-blue-pierce', category: CATEGORIES.MAIN, label: '[ 貫通弾 ]', desc: '敵を突き抜ける。', isTowerChip: true, color: '#4444ff', icon: '🏹' },
-    { id: 'chip-blue-bounce', category: CATEGORIES.MAIN, label: '[ 跳弾性能 ]', desc: '画面端で跳ね返る。', isTowerChip: true, color: '#4444ff', icon: '🏀' },
-    { id: 'chip-blue-drill', category: CATEGORIES.MAIN, label: '[ ドリル化 ]', desc: '敵を多段ヒットで削る。', isTowerChip: true, color: '#4444ff', icon: '🔩' },
-    { id: 'chip-blue-all', category: CATEGORIES.MAIN, label: '[ 全方位弾 ]', desc: '前後左右に弾を放つ。', isTowerChip: true, color: '#4444ff', icon: '💠' },
-    { id: 'chip-blue-wave', category: CATEGORIES.MAIN, label: '[ 波状攻撃 ]', desc: '弾がうねりながら飛ぶ。', isTowerChip: true, color: '#4444ff', icon: '〰️' },
-    { id: 'chip-blue-accel', category: CATEGORIES.MAIN, label: '[ 時間差加速 ]', desc: '途中で急加速する。', isTowerChip: true, color: '#4444ff', icon: '⏩' },
-    { id: 'chip-blue-split', category: CATEGORIES.MAIN, label: '[ 多段分裂 ]', desc: '着弾時に弾が分かれる。', isTowerChip: true, color: '#4444ff', icon: '🌵' },
-
-    // --- 【緑：防衛・生存】（防御・回復・無敵） ---
-    { id: 'chip-green-hp', category: CATEGORIES.PASSIVE, label: '[ 最大HP上昇 ]', desc: 'HPの最大値をアップ。', isTowerChip: true, color: '#44ff44', icon: '💗' },
-    { id: 'chip-green-heal', category: CATEGORIES.PASSIVE, label: '[ 自動修復 ]', desc: '秒間HPを小回復。', isTowerChip: true, color: '#44ff44', icon: '🛠️' },
-    { id: 'chip-green-shield', category: CATEGORIES.SKILL, label: '[ 緊急バリア ]', desc: 'ダメージを無効。', isTowerChip: true, color: '#44ff44', icon: '🛡️' },
-    { id: 'chip-green-revive', category: CATEGORIES.PASSIVE, label: '[ 再起動回数 ]', desc: '復活回数を増やす。', isTowerChip: true, color: '#44ff44', icon: '♻️' },
-    { id: 'chip-green-parry', category: CATEGORIES.PASSIVE, label: '[ ガード率 ]', desc: '確率で被弾を無効化。', isTowerChip: true, color: '#44ff44', icon: '⚔️' },
-    { id: 'chip-green-absorb', category: CATEGORIES.SKILL, label: '[ 生命吸収 ]', desc: '与撃時にHPを回復。', isTowerChip: true, color: '#44ff44', icon: '💉' },
-    { id: 'chip-green-invinc', category: CATEGORIES.PASSIVE, label: '[ 無敵延長 ]', desc: '被弾後無敵時間を延長。', isTowerChip: true, color: '#44ff44', icon: '👻' },
-
-    // --- 【黄：ハック・資源】（報酬・特殊効果） ---
-    { id: 'chip-yellow-bit', category: CATEGORIES.SYSTEM, label: '[ ビット増量 ]', desc: '敵撃破時のビットを増量。', isTowerChip: true, color: '#ffff44', icon: '💰' },
-    { id: 'chip-yellow-magnet', category: CATEGORIES.PASSIVE, label: '[ 回収磁石 ]', desc: 'ビットの吸い込み範囲拡大。', isTowerChip: true, color: '#ffff44', icon: '🧲' },
-    { id: 'chip-yellow-shop', category: CATEGORIES.SYSTEM, label: '[ ショップ割引 ]', desc: '休憩所の価格を下げる。', isTowerChip: true, color: '#ffff44', icon: '🏷️' },
-    { id: 'chip-yellow-recycle', category: CATEGORIES.SYSTEM, label: '[ リサイクル ]', desc: '確率でビットを消費しない。', isTowerChip: true, color: '#ffff44', icon: '♻️' },
-    { id: 'chip-yellow-exp', category: CATEGORIES.SYSTEM, label: '[ 経験値ブースト ]', desc: 'レベルの上がりを早くする。', isTowerChip: true, color: '#ffff44', icon: '💎' },
-    { id: 'chip-yellow-luck', category: CATEGORIES.SYSTEM, label: '[ 幸運の手 ]', desc: 'レアチップ出現率を上げる。', isTowerChip: true, color: '#ffff44', icon: '🍀' },
-    { id: 'chip-yellow-time', category: CATEGORIES.SKILL, label: '[ 時間遅延 ]', desc: '敵の動きを遅くする。', isTowerChip: true, color: '#ffff44', icon: '⏬' }
+    // --- 【白：機体系統】（じっと耐える） ---
+    { id: 'chip-white-def', category: CATEGORIES.WHITE, label: '[ カチカチ ]', desc: '自機の被ダメージを軽減', isTowerChip: true, color: '#ffffff', icon: '🛡️' },
+    { id: 'chip-white-invinc', category: CATEGORIES.WHITE, label: '[ むてき ]', desc: 'コンパイル実行後の無敵時間が長くなる', isTowerChip: true, color: '#ffffff', icon: '👻' },
+    { id: 'chip-white-barrier', category: CATEGORIES.WHITE, label: '[ バリア ]', desc: '確率で自機に当たる敵弾を自動消去', isTowerChip: true, color: '#ffffff', icon: '💠' },
+    { id: 'chip-white-small', category: CATEGORIES.WHITE, label: '[ 判定小さく ]', desc: '自機の当たり判定が小さくなる', isTowerChip: true, color: '#ffffff', icon: '🤏' },
+    { id: 'chip-white-heal', category: CATEGORIES.WHITE, label: '[ 不動回復 ]', desc: '移動していない間、自動でHPが回復', isTowerChip: true, color: '#ffffff', icon: '🧘' }
 ];
 
 // Phase 3: Initialize usage counts and memory costs
 BLOCKS.forEach(b => {
-    // Memory Cost Assignment (Extreme Scarcity)
-    if (b.category === CATEGORIES.LOGIC) b.memory = 80;
-    else if (b.category === CATEGORIES.COND) b.memory = 30;
-    else if (b.category === CATEGORIES.MAIN || b.category === CATEGORIES.SKILL) b.memory = 150;
-    else if (b.category === CATEGORIES.PASSIVE) b.memory = 60;
-    else if (b.category === CATEGORIES.SYSTEM) b.memory = 200;
-    else if (b.category === CATEGORIES.NUM) b.memory = 12;
-    else b.memory = 40;
-
-    // Usage Limits (Refined for scarcity)
-    if (!b.maxUsage) {
-        if (b.category === CATEGORIES.SYSTEM || b.category === CATEGORIES.PASSIVE) b.maxUsage = 1;
-        else if (b.category === CATEGORIES.MAIN || b.category === CATEGORIES.SKILL) b.maxUsage = 2;
-        else if (b.category === CATEGORIES.LOGIC || b.category === CATEGORIES.COND) b.maxUsage = 2;
-        else if (b.category === CATEGORIES.NUM) b.maxUsage = 5;
-        else b.maxUsage = 1;
-    }
-
+    b.memory = 40;
+    b.maxUsage = 3;
     b.remainingUsage = b.maxUsage;
 });
 
@@ -548,7 +442,7 @@ const AVAILABLE_ACTIONS = [];
 const AVAILABLE_CHARACTERS = [];
 const ALL_ITEMS = BLOCKS;
 
-let currentHackTab = 'main';
+let currentHackTab = 'red';
 
 // タブ切り替え
 function switchTab(tabName) {
@@ -570,15 +464,6 @@ function calculateTotalMemory() {
     hackingStack.forEach(entry => {
         const bMain = BLOCKS.find(b => b.id === entry.id);
         if (bMain) total += bMain.memory * (entry.level || 1); // レベル分メモリを消費
-
-        if (entry.condId) {
-            const bCond = BLOCKS.find(b => b.id === entry.condId);
-            if (bCond) total += bCond.memory;
-        }
-        if (entry.actionId) {
-            const bAct = BLOCKS.find(b => b.id === entry.actionId);
-            if (bAct) total += bAct.memory;
-        }
     });
 
     // 高負荷エリア: 消費電力が2倍
@@ -608,24 +493,18 @@ function renderHackConsole() {
         basePool = BLOCKS.filter(b => b.isTowerChip);
     }
 
-    if (currentHackTab === 'attack') {
-        filtered = basePool.filter(b => b.category === CATEGORIES.MAIN || b.category === CATEGORIES.SKILL);
-    } else if (currentHackTab === 'buff') {
-        filtered = basePool.filter(b => b.category === CATEGORIES.PASSIVE);
-    } else if (currentHackTab === 'system') {
-        filtered = basePool.filter(b => b.category === CATEGORIES.SYSTEM);
-    } else if (currentHackTab === 'logic') {
-        if (isTowerMode) {
-            filtered = []; // タワーモードではロジックブロック等を使用しない
-        } else {
-            filtered = basePool.filter(b => b.category === CATEGORIES.LOGIC || b.category === CATEGORIES.COND || b.category === CATEGORIES.NUM);
-        }
-    } else if (currentHackTab === 'data') {
-        if (isTowerMode) {
-            filtered = [];
-        } else {
-            filtered = basePool.filter(b => b.category === CATEGORIES.PARAM);
-        }
+    if (currentHackTab === 'red') {
+        filtered = basePool.filter(b => b.category === CATEGORIES.RED);
+    } else if (currentHackTab === 'blue') {
+        filtered = basePool.filter(b => b.category === CATEGORIES.BLUE);
+    } else if (currentHackTab === 'yellow') {
+        filtered = basePool.filter(b => b.category === CATEGORIES.YELLOW);
+    } else if (currentHackTab === 'green') {
+        filtered = basePool.filter(b => b.category === CATEGORIES.GREEN);
+    } else if (currentHackTab === 'purple') {
+        filtered = basePool.filter(b => b.category === CATEGORIES.PURPLE);
+    } else if (currentHackTab === 'white') {
+        filtered = basePool.filter(b => b.category === CATEGORIES.WHITE);
     }
 
     filtered.forEach(block => {
@@ -980,14 +859,14 @@ function showTowerFloorSelect() {
     const overlay = document.getElementById('tower-floor-select');
     overlay.classList.remove('hidden');
     document.getElementById('tower-floor-num').textContent = `F${String(towerState.currentFloor).padStart(2, '0')}`;
-    
+
     // Bits display update
     const bitsSpan = document.getElementById('tower-floor-bits');
     if (bitsSpan) bitsSpan.textContent = playerBits;
 
     const container = document.getElementById('floor-options-container');
     container.innerHTML = '';
-    
+
     // プログレスバー（サイドバー）の生成
     const sidebar = document.getElementById('tower-progress-sidebar');
     if (sidebar) {
@@ -997,12 +876,12 @@ function showTowerFloorSelect() {
             wrapper.className = 'tower-node-wrapper';
             if (i < towerState.currentFloor) wrapper.classList.add('cleared');
             if (i === towerState.currentFloor) wrapper.classList.add('active');
-            
+
             wrapper.innerHTML = `
                 <div class="tower-dot"></div>
                 <div class="tower-dot-label">F${i.toString().padStart(2, '0')}</div>
             `;
-            
+
             sidebar.appendChild(wrapper);
             if (i === towerState.currentFloor) {
                 setTimeout(() => {
@@ -1036,7 +915,7 @@ function showTowerFloorSelect() {
     towerState.floorOptions.forEach(opt => {
         const card = document.createElement('div');
         card.className = `floor-card type-${opt.color || 'blue'}`;
-        
+
         let rewardName = "???";
         if (opt.rewardBlockId) {
             const b = BLOCKS.find(x => x.id === opt.rewardBlockId);
@@ -1075,7 +954,7 @@ function showTowerAssembleScreen() {
         const block = BLOCKS.find(b => b.id === towerState.pendingReward);
         if (block) {
             addLog(`NEW_CHIP_ACQUIRED: ${block.label}`, "hack");
-            
+
             // Tower Mode のスタック（重ねがけ）ロジック
             let existing = hackingStack.find(m => m.id === towerState.pendingReward);
             if (existing) {
@@ -1087,15 +966,15 @@ function showTowerAssembleScreen() {
         }
     }
     towerState.pendingReward = null;
-    
+
     // ハッキング画面を出さずに、自動でステータスを更新してフロア選択へ
     player.activeModules = JSON.parse(JSON.stringify(hackingStack));
     applyStaticStats();
     applyDynamicLogic();
     updateUI();
-    
+
     showTowerFloorSelect();
-    addLog(`FLOOR_${towerState.currentFloor-1}_CLEAR: システムをアップグレードしました`, "hack");
+    addLog(`FLOOR_${towerState.currentFloor - 1}_CLEAR: システムをアップグレードしました`, "hack");
 }
 
 function showTowerShopScreen() {
@@ -1103,10 +982,10 @@ function showTowerShopScreen() {
     const overlay = document.getElementById('tower-shop-screen');
     overlay.classList.remove('hidden');
     document.getElementById('shop-bits').textContent = playerBits;
-    
+
     const container = document.getElementById('shop-items-container');
     container.innerHTML = '';
-    
+
     const skills = [
         { id: 'debugger_shield', name: 'デバッガー・シールド', desc: '5秒間、敵弾を無効化するバリアを展開', price: 300 },
         { id: 'overclock', name: 'オーバークロック', desc: '一時的に連射狂化されるが、後で速度低下', price: 400 },
@@ -1115,7 +994,7 @@ function showTowerShopScreen() {
         { id: 'missile_strike', name: 'ミサイル・ストライク', desc: '画面をタップした位置に超広範囲爆撃', price: 700 },
         { id: 'code_burst', name: 'コード・バースト', desc: '全敵を静止し、解除時に蓄積ダメージを与える', price: 800 }
     ];
-    
+
     // Pick 2 random skills to sell
     const shuffledSkills = skills.sort(() => 0.5 - Math.random());
     const shopOptions = [
@@ -1123,7 +1002,7 @@ function showTowerShopScreen() {
         shuffledSkills[0],
         shuffledSkills[1]
     ];
-    
+
     shopOptions.forEach(opt => {
         const card = document.createElement('div');
         card.style.background = 'rgba(0, 30, 0, 0.8)';
@@ -1132,14 +1011,14 @@ function showTowerShopScreen() {
         card.style.width = '200px';
         card.style.textAlign = 'center';
         card.style.borderRadius = '4px';
-        
+
         card.innerHTML = `
             <div style="color: #fff; font-weight: bold; margin-bottom: 5px;">${opt.name}</div>
             <div style="color: #aaa; font-size: 0.7rem; margin-bottom: 10px; min-height: 40px;">${opt.desc}</div>
             <div style="color: #0ff; margin-bottom: 10px; font-family: monospace; font-weight: bold;">${opt.price} BITS</div>
             <button class="buy-btn" style="background: #00ff41; color: #000; padding: 8px 10px; font-weight: bold; width: 100%; border: none; cursor: pointer; border-radius: 4px;">購入 [ BUY ]</button>
         `;
-        
+
         const btn = card.querySelector('.buy-btn');
         btn.onclick = () => {
             if (playerBits >= opt.price) {
@@ -1150,7 +1029,7 @@ function showTowerShopScreen() {
                 btn.style.background = "#555";
                 btn.style.color = "#aaa";
                 btn.disabled = true;
-                
+
                 if (opt.type === 'heal') {
                     hp = towerState.permanentUpgrades.maxHP;
                     addLog("HUD: 機体完全性が回復しました", "hack");
@@ -1165,7 +1044,7 @@ function showTowerShopScreen() {
         };
         container.appendChild(card);
     });
-    
+
     document.getElementById('shop-leave-btn').onclick = () => {
         addLog("SHOP: 通信を切断します...", "hack");
         TowerManager.clearFloor();
@@ -1185,48 +1064,12 @@ function closeTowerMetaHack() {
 }
 
 function renderTowerMetaHack() {
-    const bitsDisplay = document.getElementById('meta-hack-bits');
-    bitsDisplay.textContent = `AVAILABLE_BITS: ${playerBits}`;
-    
-    const list = document.getElementById('meta-upgrade-list');
-    list.innerHTML = '';
-    
-    const upgrades = [
-        { id: 'maxHP', label: '最大HPアップ', cost: 500, step: 20 },
-        { id: 'initialBits', label: '初期ビット増加', cost: 300, step: 100 },
-        { id: 'revives', label: 'リコンストラクト (復活回数)', cost: 1000, step: 1 },
-        { id: 'initialSlots', label: '初期スロット拡張', cost: 800, step: 1 }
-    ];
-
-    upgrades.forEach(upg => {
-        const div = document.createElement('div');
-        div.style = "display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #222; padding:5px 0;";
-        const currentVal = towerState.permanentUpgrades[upg.id];
-        div.innerHTML = `
-            <div>
-                <div style="font-size:0.8rem;">${upg.label}</div>
-                <div style="font-size:0.6rem; color:#888;">現在: ${currentVal}</div>
-            </div>
-            <button class="btn-primary" style="font-size:0.6rem; padding:4px 8px;" onclick="buyMetaUpgrade('${upg.id}', ${upg.cost}, ${upg.step})">
-                強化 (${upg.cost} BIT)
-            </button>
-        `;
-        list.appendChild(div);
-    });
+    // 操作説明ガイドに差し替えたため、現在は静的表示のみ。
+    // 必要に応じて将来的にキーコンフィグなどの動的要素をここに追加可能。
 }
 
 function buyMetaUpgrade(id, cost, step) {
-    if (playerBits >= cost) {
-        playerBits -= cost;
-        towerState.permanentUpgrades[id] += step;
-        localStorage.setItem('hacker_shooter_bits', playerBits);
-        localStorage.setItem('hacker_shooter_tower_upgrades', JSON.stringify(towerState.permanentUpgrades));
-        addLog(`UPGRADE_SUCCESS: ${id}`, "hack");
-        renderTowerMetaHack();
-        updateHomeBits();
-    } else {
-        addLog("INSUFFICIENT_BITS", "error");
-    }
+    // 永続強化機能は廃止されました。
 }
 
 function updateHomeBits() {
@@ -1240,7 +1083,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.onclick = () => selectMode(item.getAttribute('data-mode'));
     });
-    
+
     // 初期モードを選択状態にする
     selectMode('normal');
 });
@@ -1284,17 +1127,17 @@ let selectedMode = 'normal';
 function selectMode(mode) {
     selectedMode = mode;
     const data = modeData[mode];
-    
+
     // UI更新
     document.getElementById('selected-mode-title').textContent = data.title;
     document.getElementById('selected-mode-desc').textContent = data.desc;
     document.getElementById('selected-mode-meta').textContent = data.meta;
-    
+
     // アクティブクラスの切り替え
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.toggle('active', item.getAttribute('data-mode') === mode);
     });
-    
+
     // スタートボタンの表示
     const startBtn = document.getElementById('execute-start-btn');
     startBtn.classList.remove('hidden');
@@ -1482,7 +1325,7 @@ function calculateSynergyBonus(colorName) {
         const b = BLOCKS.find(x => x.id === m.id);
         return b && b.color === targetColor;
     }).length;
-    
+
     if (count >= 5) return 1.5;
     if (count >= 3) return 1.2;
     return 1.0;
@@ -1514,16 +1357,16 @@ function applyStaticStats() {
     player.chargeLevel = 0;
     player.lastSkillTime = 0;
     player.bossTimeElapsed = 0;
-    
+
     // Tower Skills Flags
     player.hasDebuggerShield = false;
     player.isOverclocked = false;
     player.isCoolingDown = false;
     player.hasLogicChainActive = false;
-    
+
     player.hasEndurance = false;
     player.autoFire = false;
-    player.subShips = 0;
+    // player.subShips = 0; // 毎フレームのリセットを停止
     player.advancedSubShips = 0;
     player.hasBlackHole = false;
     bitMultiplier = 1;
@@ -1543,31 +1386,42 @@ function applyStaticStats() {
     player.isFreeze = false;
     player.isPoison = false;
     // --- 新規プロパティリセット ---
-    player.isChainAdv = false;
-    player.isGravity = false;
-    player.isReflecting = false;
-    player.isShrink = false;
-    player.isLightning = false;
-    player.hasTurrets = false;
-    player.hasDecoy = false;
-    player.hasBlade = false;
-    player.hasHacking = false;
-    player.hasPortal = false;
-    player.hasFireworks = false;
-    player.isGrowing = false;
-    player.isDrill = false;
-    player.isBloodPact = false;
-    // --- Phase 2 Reset ---
-    player.hasEcho = false;
-    player.hasBinaryTrade = false;
-    player.hasInertia = false;
-    player.hasCompress = false;
-    player.hasLatency = false;
-    player.hasSynchro = false;
-    player.hasMalware = false;
-    player.hasRepel = false;
-    player.hasReboot = false;
-    player.hasRandom = false;
+    // --- 新規プロパティリセット (6系統30種) ---
+    player.compileDamageBonus = 0;
+    player.compileSizeBonus = 0;
+    player.compileSpeedBonus = 0;
+    player.compileCritChance = 0;
+    player.hasCompilePursuit = false;
+
+    player.bonusThreads = 0;
+    player.threadMaxLengthBonus = 0;
+    player.threadWidthBonus = 0;
+    player.threadRateBonus = 0;
+    player.threadSpeedBonus = 0;
+    player.hasThreadHoming = false;
+
+    player.drainSpeedBonus = 0;
+    player.threadSlowEnemy = false;
+    player.threadAtkDown = false;
+    player.threadDefDown = false;
+    player.threadRegen = false;
+
+    player.bitBonus = 0;
+    player.dropBonus = 0;
+    player.memoryCostReduction = 0;
+    player.compileFreeChance = 0;
+
+    player.threadStunChance = 0;
+    player.threadPoisonActive = false;
+    player.compileKnockback = false;
+    player.compileWarp = false;
+    player.compileBurn = false;
+
+    player.defBonus = 0;
+    player.invincBonus = 0;
+    player.barrierChance = 0;
+    player.idleHeal = 0;
+    player.subShipAutoMode = true; // デフォルトはオート召喚モード
 
     // シナジーボーナスの適用
     const redBonus = calculateSynergyBonus('red');
@@ -1611,104 +1465,52 @@ function applyDynamicLogic(target = null) {
 function applyActionEffect(actionId, p, target = null, level = 1) {
     const obj = target || player;
     switch (actionId) {
-        // --- TOWER MODE CHIPS (30 SELECTION) ---
-        // 【赤：破壊系統】
-        case 'chip-red-dmg': player.towerDamageMult = (player.towerDamageMult || 1.0) * (1 + 0.4 * level); break;
-        case 'chip-red-range': player.towerExplosionSize = (player.towerExplosionSize || 1.0) * (1 + 0.3 * level); obj.isExplosion = true; break;
-        case 'chip-red-rate': player.fireRate = Math.max(20, 180 / (1 + 0.25 * level)); break;
-        case 'chip-red-crit': player.towerCritChance = (player.towerCritChance || 0) + (15 * level); break;
-        case 'chip-red-boss': player.towerBossDamageMult = (player.towerBossDamageMult || 1.0) + (1.0 * level); break;
-        case 'chip-red-frag': player.hasFrag = true; player.fragLevel = level; break;
-        case 'chip-red-burn': player.hasBurn = true; player.burnLevel = level; break;
+        // --- 6系統・全30種の新規ブロック ---
+        // 【赤：コンパイル系統】
+        case 'chip-red-dmg': player.compileDamageBonus = (player.compileDamageBonus || 0) + (0.5 * level); break;
+        case 'chip-red-range': player.compileSizeBonus = (player.compileSizeBonus || 0) + (0.5 * level); break;
+        case 'chip-red-rate': player.compileSpeedBonus = (player.compileSpeedBonus || 0) + (0.2 * level); break;
+        case 'chip-red-crit': player.compileCritChance = (player.compileCritChance || 0) + (0.2 * level); break;
+        case 'chip-red-follow': player.hasCompilePursuit = true; break;
 
-        // 【青：機動力・弾幕】
-        case 'chip-blue-homing': obj.isHoming = true; player.towerHomingStrength = (player.towerHomingStrength || 1) + (2 * level); break;
-        case 'chip-blue-pierce': obj.isPiercing = true; player.towerPierceCount = (player.towerPierceCount || 1) + level; break;
-        case 'chip-blue-bounce': obj.isBouncing = true; player.towerBounceCount = (player.towerBounceCount || 0) + (2 * level); break;
-        case 'chip-blue-drill': obj.isDrill = true; player.towerDrillInterval = Math.max(2, 10 - level); break;
-        case 'chip-blue-all': player.multiShot = Math.min(36, player.multiShot + (4 * level)); break;
-        case 'chip-blue-wave': obj.isWave = true; break;
-        case 'chip-blue-accel': obj.isStepAccel = true; break;
-        case 'chip-blue-split': obj.isSplitting = true; player.towerSplitCount = (player.towerSplitCount || 2) + level; break;
-
-        // 【緑：防衛・生存】
-        case 'chip-green-hp': const oldMax = MAX_HP; player.towerMaxHP = (player.towerMaxHP || 100) + (50 * level); if (hp === oldMax) hp = player.towerMaxHP; break;
-        case 'chip-green-heal': player.autoHeal += (0.02 * level); break;
-        case 'chip-green-shield': player.barrierTimer = Math.max(player.barrierTimer || 0, 180 * level); break;
-        case 'chip-green-revive': player.lives = (player.lives || 0) + level; break;
-        case 'chip-green-parry': player.towerAutoGuardChance = (player.towerAutoGuardChance || 0) + (10 * level); break;
-        case 'chip-green-absorb': player.towerLifeSteal = (player.towerLifeSteal || 0) + (0.05 * level); break;
-        case 'chip-green-invinc': player.towerInvincMult = (player.towerInvincMult || 1.0) + (0.5 * level); break;
-
-        // 【黄：ハック・資源】
-        case 'chip-yellow-bit': player.towerBitGainMult = (player.towerBitGainMult || 1.0) + (1.0 * level); break;
-        case 'chip-yellow-magnet': player.isMagnet = true; player.towerMagnetRange = (player.towerMagnetRange || 100) + (150 * level); break;
-        case 'chip-yellow-shop': player.towerShopDiscount = (player.towerShopDiscount || 0) + (0.1 * level); break;
-        case 'chip-yellow-recycle': player.towerRecycleChance = (player.towerRecycleChance || 0) + (20 * level); break;
-        case 'chip-yellow-exp': player.expBonus *= (1 + 0.5 * level); break;
-        case 'chip-yellow-luck': player.towerLuck = (player.towerLuck || 0) + level; break;
-        case 'chip-yellow-time': player.isSlowMotion = true; player.slowTimer = 300; break;
-
-        // --- ORIGINAL BLOCKS ---
-        case 'main-shot-count': player.multiShot = Math.min(5, player.multiShot + (p || 1)); break;
-        case 'main-homing': obj.isHoming = true; break;
-        case 'main-laser': obj.isLaser = true; break;
-        case 'main-bomb': obj.isBomb = true; break;
-        case 'main-rear': player.isRearShot = true; break;
-        case 'main-speed':
-            if (target) { target.vx *= 1.2; target.vy *= 1.2; }
-            else player.bulletSpeedMult *= (1 + (p || 10) / 100);
+        // 【青：スレッド系統】
+        case 'chip-blue-count': player.bonusThreads = (player.bonusThreads || 0) + level; break;
+        case 'chip-blue-length': player.threadMaxLengthBonus = (player.threadMaxLengthBonus || 0) + (50 * level); break;
+        case 'chip-blue-width': player.threadWidthBonus = (player.threadWidthBonus || 0) + (2 * level); break;
+        case 'chip-blue-speed':
+            player.threadRateBonus = (player.threadRateBonus || 0) + (0.2 * level);
+            player.threadSpeedBonus = (player.threadSpeedBonus || 0) + (0.3 * level);
             break;
-        case 'main-size':
-            if (target) target.size *= 1.5;
-            else player.bulletSizeMult *= (1 + (p || 10) / 100);
-            break;
-        case 'skill-option': player.subShips += (p || 1); break;
-        case 'passive-hitbox': player.hitboxSizeMult *= 0.8; break;
-        case 'passive-magnet': player.isMagnet = true; break;
-        case 'passive-auto-heal': player.autoHeal += 0.03; break;
-        case 'passive-lives': player.lives = (player.lives || 3) + 1; break;
-        case 'passive-exp': player.expBonus *= (p || 1.2); break;
-        case 'system-coin': player.bulletToCoin = true; break;
-        case 'system-explode': player.corpseExplosion = true; break;
-        case 'system-slow': player.isSlowMotion = true; break;
-        case 'system-endure': player.hasEndurance = true; break;
-        case 'system-auto-fire': player.autoFire = true; break;
-        case 'passive-blackhole': player.hasBlackHole = true; break;
-        case 'skill-subship-adv': player.advancedSubShips += 1; break;
-        case 'system-bit-double': bitMultiplier += 1; break;
-        case 'base-piercing': obj.isPiercing = true; break;
-        case 'base-stationary': obj.isStationary = true; break;
-        case 'base-splitting': obj.isSplitting = true; break;
-        case 'base-bouncing': obj.isBouncing = true; break;
-        case 'form-rotating': obj.isRotating = true; break;
-        case 'form-growing': obj.isGrowing = true; if (target) target.size *= 2; break;
-        case 'form-boomerang': obj.isBoomerang = true; break;
-        case 'form-accel': obj.isStepAccel = true; break;
-        case 'form-wave': obj.isWave = true; break;
-        case 'effect-explosion': obj.isExplosion = true; break;
-        case 'effect-attract': obj.isAttract = true; break;
-        case 'effect-chain': obj.isChain = true; break;
-        case 'effect-freeze': obj.isFreeze = true; break;
-        case 'effect-poison': obj.isPoison = true; break;
-        case 'effect-chain-adv': obj.isChainAdv = true; break;
-        case 'main-gravity': obj.isGravity = true; break;
-        case 'main-reflect': obj.isReflecting = true; break;
-        case 'effect-shrink': obj.isShrink = true; break;
-        case 'effect-lightning': obj.isLightning = true; break;
-        case 'system-hacking': player.hasHacking = true; break;
-        case 'system-fireworks': player.hasFireworks = true; break;
-        case 'main-drill': obj.isDrill = true; break;
-        case 'passive-blood-pact': player.isBloodPact = true; player.bloodPactDamage = 4.0; break;
-        case 'effect-echo': player.hasEcho = true; break;
-        case 'system-binary-trade': player.hasBinaryTrade = true; break;
-        case 'main-compress': player.hasCompress = true; break;
-        case 'main-latency': player.hasLatency = true; obj.isPiercing = true; break;
-        case 'skill-synchro': player.hasSynchro = true; break;
-        case 'effect-malware': player.hasMalware = true; break;
-        case 'effect-repel': player.hasRepel = true; break;
-        case 'system-reboot': player.hasReboot = true; break;
-        case 'system-random': player.hasRandom = true; break;
+        case 'chip-blue-homing': player.hasThreadHoming = true; break;
+
+        // 【黄：ドレイン系統】
+        case 'chip-yellow-drain': player.drainSpeedBonus = (player.drainSpeedBonus || 0) + (1.0 * level); break;
+        case 'chip-yellow-slow': player.threadSlowEnemy = true; break;
+        case 'chip-yellow-atkdown': player.threadAtkDown = true; break;
+        case 'chip-yellow-defdown': player.threadDefDown = true; break;
+        case 'chip-yellow-regen': player.threadRegen = true; break;
+
+        // 【緑：リソース系統】
+        case 'chip-green-bit': player.bitBonus = (player.bitBonus || 0) + level; break;
+        case 'chip-green-magnet': player.isMagnet = true; player.towerMagnetRange = 300; break;
+        case 'chip-green-drop': player.dropBonus = (player.dropBonus || 0) + (0.2 * level); break;
+        case 'chip-green-cost': player.memoryCostReduction = (player.memoryCostReduction || 0) + (0.2 * level); break;
+        case 'chip-green-save': player.compileFreeChance = (player.compileFreeChance || 0) + (15 * level); break;
+
+        // 【紫：バグ系統】
+        case 'chip-purple-stun': player.threadStunChance = (player.threadStunChance || 0) + (0.1 * level); break;
+        case 'chip-purple-poison': player.threadPoisonActive = true; break;
+        case 'chip-purple-knockback': player.compileKnockback = true; break;
+        case 'chip-purple-warp': player.compileWarp = true; break;
+        case 'chip-purple-burn': player.compileBurn = true; break;
+
+        // 【白：機体系統】
+        case 'chip-white-def': player.defBonus = (player.defBonus || 0) + (0.2 * level); break;
+        case 'chip-white-invinc': player.invincBonus = (player.invincBonus || 0) + (1.0 * level); break;
+        case 'chip-white-barrier': player.barrierChance = (player.barrierChance || 0) + (0.1 * level); break;
+        case 'chip-white-small': player.hitboxSizeMult = Math.max(0.2, (player.hitboxSizeMult || 1.0) - (0.2 * level)); break;
+        case 'chip-white-heal': player.idleHeal = (player.idleHeal || 0) + (0.1 * level); break;
+
 
         default:
             if (actionId.startsWith('skill-')) {
@@ -1928,12 +1730,44 @@ function updateUI() {
     const hackReady = document.getElementById('hack-ready-text');
     if (hackReady) hackReady.textContent = hackGauge >= 100 ? "!! SYSTEM_READY !!" : "(GATHERING_DATA)";
 
-    // ゴール到達率
-    const goalPct = Math.min(100, (score / CLEAR_TIME) * 100);
-    const goalBar = document.getElementById('goal-bar');
-    if (goalBar) goalBar.style.width = `${goalPct}%`;
-    const goalText = document.getElementById('goal-text');
-    if (goalText) goalText.textContent = `${Math.floor(goalPct)}% 到着`;
+    // エネルギーゲージ (右側)
+    const energyBar = document.getElementById('energy-bar');
+    if (energyBar) {
+        energyBar.style.width = `${energyGauge}%`;
+        energyBar.style.boxShadow = energyGauge >= 50 ? '0 0 10px #ffdd00' : 'none';
+    }
+
+    // サブ機召喚モード
+    const modeText = document.getElementById('subship-mode-text');
+    if (modeText) {
+        modeText.textContent = player.subShipAutoMode ? "AUTO_DEPLOY" : "MANUAL_AUTH";
+        modeText.style.color = player.subShipAutoMode ? "#00ff41" : "#ffdd00";
+    }
+
+    // フロアボス進捗 (Boss HP)
+    if (isTowerMode) {
+        const goalBar = document.getElementById('goal-bar');
+        const goalText = document.getElementById('goal-text');
+        const boss = enemies.find(e => e.isBoss);
+
+        if (boss) {
+            const hpPercent = Math.max(0, (boss.hp / boss.maxHp) * 100);
+            const progress = 100 - hpPercent;
+            if (goalBar) goalBar.style.width = `${progress}%`;
+
+            // 接続中の敵機をカウント
+            const tetheredCount = enemies.filter(e => !e.isBoss && (typeof threads !== "undefined" ? threads : []).some(t => t.active && t.target === e)).length;
+
+            if (goalText) {
+                goalText.textContent = `BOSS_SUPPRESSION: ${Math.floor(progress)}% [TETHERED: ${tetheredCount}]`;
+                if (tetheredCount > 0) goalText.style.color = "#ffdd00";
+                else goalText.style.color = "#fff";
+            }
+        }
+
+        const goalLabel = goalText.previousElementSibling;
+        if (goalLabel) goalLabel.textContent = "ターゲット制圧プログレス（Aキーで起爆）";
+    }
 
     // HOME画面のビット表示
     const homeBitCount = document.getElementById('home-bit-count');
@@ -1958,7 +1792,7 @@ function updateUI() {
         if (skillHud) skillHud.classList.remove('hidden');
         const skillName = document.getElementById('tower-skill-name');
         if (skillName) skillName.textContent = player.currentTowerSkillName || 'NO SKILL';
-        
+
         const cooldownBar = document.getElementById('tower-skill-cooldown-bar');
         if (cooldownBar && player.currentTowerSkill) {
             const pct = Math.floor(hackGauge);
@@ -1966,8 +1800,8 @@ function updateUI() {
             cooldownBar.style.background = pct >= 100 ? '#00ff41' : '#066';
             skillName.style.color = pct >= 100 ? '#fff' : '#888';
         }
-    } else {
-        if (skillHud) skillHud.classList.add('hidden');
+    } else if (skillHud) {
+        skillHud.classList.add('hidden');
     }
 }
 
@@ -2002,31 +1836,18 @@ function gameClear() {
 
 class Enemy {
     constructor() {
-        // 4辺のどこかからランダムにスポーン
-        const side = Math.floor(Math.random() * 4);
-        if (side === 0) { // 上から
-            this.x = Math.random() * canvas.width;
-            this.y = -20;
-            this.dirX = 0; this.dirY = 1;
-        } else if (side === 1) { // 下から
-            this.x = Math.random() * canvas.width;
-            this.y = canvas.height + 20;
-            this.dirX = 0; this.dirY = -1;
-        } else if (side === 2) { // 左から
-            this.x = -20;
-            this.y = Math.random() * canvas.height;
-            this.dirX = 1; this.dirY = 0;
-        } else { // 右から
-            this.x = canvas.width + 20;
-            this.y = Math.random() * canvas.height;
-            this.dirX = -1; this.dirY = 0;
-        }
+        // 画面上部からスポーンし、垂直方向に移動する
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = -50;
+        this.dirX = 0;
+        this.dirY = 1;
 
-        let baseHp = 1 + Math.floor(playerPowerLevel * 0.8);
+        // HPを大幅に強化 (弾幕シューティングから糸で吸う形へ)
+        let baseHp = 150 + Math.floor((playerPowerLevel || 0) * 30);
         if (bossesDefeated >= 1) {
-            baseHp = Math.max(3, baseHp); // 1体目のボス撃破後は最低でも弾3発分の体力に
+            baseHp = Math.max(200, baseHp);
         }
-        this.speed = (2 + Math.random() * 2) * 0.5; // (全モード共通) 速度を半分に
+        this.speed = (2 + Math.random() * 2) * 0.5;
         this.color = '#0ff';
         this.type = 'normal';
         this.w = 30;
@@ -2069,8 +1890,7 @@ class Enemy {
             }
         }
 
-        // 全体難易度の底上げ
-        const floorHPMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.05) : 1.0; // 0.06 -> 0.05 (更なる緩和)
+        const floorHPMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.05) : 1.0;
         this.hp = Math.ceil(this.hp * (1 + bossesDefeated * 0.5) * floorHPMult);
         this.maxHp = this.hp;
 
@@ -2081,8 +1901,17 @@ class Enemy {
         this.vulnerableTimer = 0;
         this.noiseLevel = 0;
         this.isSelfDestruct = false;
+        this.hackingProgress = 0;
+        this.isAlly = false;
+        this.lastShotTime = 0;
+        this.targetId = Math.random().toString(36).substr(2, 9);
     }
     update(speedMult) {
+        if (this.isTethered) { // 糸が当たっている敵は移動停止
+            speedMult = 0;
+        }
+        this.isTethered = false; // 使用後にリセットするように変更
+
         if (this.freezeTimer > 0) {
             this.freezeTimer--;
             speedMult = 0;
@@ -2138,13 +1967,15 @@ class Enemy {
             }
         }
 
-        // プレイヤーの方向に向かって移動（360度全方位）
+        // 垂直落下移動
         if (!this.isBoss) {
-            const dx = player.x - this.x;
-            const dy = player.y - this.y;
-            const dist = Math.hypot(dx, dy) || 1;
-            this.x += (dx / dist) * this.speed * speedMult;
-            this.y += (dy / dist) * this.speed * speedMult;
+            this.y += this.speed * speedMult;
+            // 画面外（下）に出たらダメージ
+            if (this.y > canvas.height + 20) {
+                hp -= 5;
+                addLog("!! BREACH_DETECTED: NODE_REACHED_CORE !!", "error");
+                this.hp = -100; // 消去フラグ
+            }
         }
         this.angle += 0.05 * speedMult;
 
@@ -2153,12 +1984,65 @@ class Enemy {
             const dx = v.x - this.x;
             const dy = v.y - this.y;
             const dist = Math.hypot(dx, dy);
-            if (dist < 1200) { 
+            if (dist < 1200) {
                 const strength = 15 + (player.towerVortexStrength || 0);
                 this.x += (dx / dist) * strength;
                 this.y += (dy / dist) * strength;
             }
         });
+
+        // 味方化時の挙動: 指定された間隔で付近の敵に弾を撃つ
+        if (this.isAlly) {
+            this.color = '#0ff'; // 味方カラー
+            const now = Date.now();
+            if (now - (this.lastShotTime || 0) > 1200) {
+                let nearest = null;
+                let minDist = 500;
+                for (let e of enemies) {
+                    if (e !== this && !e.isAlly) {
+                        const d = Math.hypot(e.x - this.x, e.y - this.y);
+                        if (d < minDist) { minDist = d; nearest = e; }
+                    }
+                }
+                if (nearest) {
+                    const ang = Math.atan2(nearest.y - this.y, nearest.x - this.x);
+                    bullets.push({
+                        x: this.x, y: this.y, vx: Math.cos(ang) * 10, vy: Math.sin(ang) * 10,
+                        color: '#0ff', size: 1.0, life: 100, attacker: 'ally', damage: 50
+                    });
+                    this.lastShotTime = now;
+                }
+            }
+
+            // ウイルス拡散 (Viral Hacking): 付近の敵にスレッドを伸ばす
+            if (now - (this.lastViralTime || 0) > 3000) {
+                let targetEnemy = null;
+                let minDist = 300;
+                for (let e of enemies) {
+                    if (e !== this && !e.isAlly && !e.isTetheredByAlly) {
+                        const d = Math.hypot(e.x - this.x, e.y - this.y);
+                        if (d < minDist) { minDist = d; targetEnemy = e; }
+                    }
+                }
+                if (targetEnemy) {
+                    const speed = 12;
+                    const angle = Math.atan2(targetEnemy.y - this.y, targetEnemy.x - this.x);
+                    threads.push({
+                        x: this.x, y: this.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        active: false,
+                        target: null,
+                        ownerId: `ally_${this.targetId || Math.random()}`,
+                        life: 60, baseLife: 60, width: 1.5,
+                        drainRate: 0.3, // 味方のハックは少し遅い
+                        isAllyThread: true
+                    });
+                    targetEnemy.isTetheredByAlly = true; // 重複防止
+                    this.lastViralTime = now;
+                }
+            }
+        }
     }
     draw() {
         ctx.save();
@@ -2188,37 +2072,64 @@ class Enemy {
         ctx.lineWidth = 2;
         ctx.beginPath();
 
+        const hpRatio = this.hp / this.maxHp;
+
+        // HPによる色の変化とグリッチオフセット
+        let glitchX = 0;
+        let glitchY = 0;
+        let pColor = '0, 255, 255';
+
+        if (this.type === 'tank') pColor = '255, 136, 0';
+        else if (this.type === 'speed') pColor = '255, 255, 0';
+        else if (this.type === 'shooter') pColor = '255, 0, 255';
+
+        // HPが減ると色が赤みを帯び、形状がブレる
+        if (hpRatio <= 0.5) {
+            pColor = '255, 100, 100'; // 危険状態色
+            if (hpRatio <= 0.25) {
+                pColor = '255, 0, 0'; // 瀕死
+                glitchX = (Math.random() - 0.5) * 4;
+                glitchY = (Math.random() - 0.5) * 4;
+            }
+        }
+        ctx.translate(glitchX, glitchY); // グリッチ適用
+
         // 敵タイプ別の描画形状
         if (this.type === 'tank') {
             ctx.lineWidth = 3;
             ctx.arc(0, 0, 16, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 136, 0, 0.3)';
+            ctx.fillStyle = `rgba(${pColor}, 0.4)`;
+            ctx.strokeStyle = `rgba(${pColor}, 1.0)`;
         } else if (this.type === 'speed') {
             ctx.moveTo(0, 15);
             ctx.lineTo(12, -12);
             ctx.lineTo(-12, -12);
-            ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+            ctx.fillStyle = `rgba(${pColor}, 0.4)`;
+            ctx.strokeStyle = `rgba(${pColor}, 1.0)`;
         } else if (this.type === 'shooter') {
             ctx.moveTo(-15, -12);
             ctx.lineTo(15, -12);
             ctx.lineTo(0, 15);
-            ctx.fillStyle = 'rgba(255, 0, 255, 0.3)';
+            ctx.fillStyle = `rgba(${pColor}, 0.4)`;
+            ctx.strokeStyle = `rgba(${pColor}, 1.0)`;
         } else {
             ctx.moveTo(0, -16);
             ctx.lineTo(16, 0);
             ctx.lineTo(0, 16);
             ctx.lineTo(-16, 0);
-            ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
+            ctx.fillStyle = `rgba(${pColor}, 0.3)`;
+            ctx.strokeStyle = `rgba(${pColor}, 1.0)`;
         }
         ctx.closePath();
         ctx.stroke();
         ctx.fill();
 
-        // Malware Noise
-        if (this.noiseLevel > 0) {
+        // 追加のノイズ(体力が減るほど増加)
+        const noiseAmount = (this.noiseLevel || 0) + (hpRatio < 0.5 ? Math.floor((0.5 - hpRatio) * 10) : 0);
+        if (noiseAmount > 0) {
             ctx.fillStyle = '#f00';
-            for (let i = 0; i < this.noiseLevel; i++) {
-                ctx.fillRect((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, 2, 2);
+            for (let i = 0; i < noiseAmount; i++) {
+                ctx.fillRect((Math.random() - 0.5) * 35, (Math.random() - 0.5) * 35, 2, 2);
             }
         }
 
@@ -2233,6 +2144,14 @@ class Enemy {
         ctx.strokeRect(-5, -5, 10, 10);
 
         ctx.restore();
+
+        // ハッキング進捗ゲージ (頭上に表示)
+        if (this.hackingProgress > 0 && !this.isAlly) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(this.x - 20, this.y - 35, 40, 4);
+            ctx.fillStyle = '#0ff';
+            ctx.fillRect(this.x - 20, this.y - 35, 40 * this.hackingProgress, 4);
+        }
     }
     die() {
         if (this.isBoss && isTowerMode) {
@@ -2290,41 +2209,32 @@ class Boss extends Enemy {
     constructor(hp, name) {
         super();
         this.x = canvas.width / 2;
-        this.y = -100;
+        this.y = 80;
         this.hp = hp;
         this.maxHp = hp;
         this.name = name;
         this.isBoss = true;
-        this.state = 'enter';
-        this.patternTimer = 0;
-        this.pattern = 0;
-        this.targetY = 80;
+        this.state = 'active';
+        this.attackTimer = 300; // 5秒ごとに攻撃
         this.angle = 0;
         this.speed = 0;
     }
 
     update(speedMult) {
-        if (this.state === 'enter') {
-            // 中心に向かって進入
-            const dx = player.x - this.x;
-            const dy = player.y - this.y;
-            const dist = Math.hypot(dx, dy);
-            this.x += (dx / dist) * 2;
-            this.y += (dy / dist) * 2;
-            if (dist < 120) this.state = 'active';
-            return;
+        this.angle += 0.02;
+        this.attackTimer--;
+
+        if (this.attackTimer <= 0) {
+            // ボス攻撃
+            hp -= 15;
+            addLog(`!! BOSS_ATTACK: EXECUTION_ERROR !!`, 'error');
+            screenShake = 15;
+            createExplosion(player.x, player.y, '#f00', 50);
+            this.attackTimer = 240 + Math.random() * 120; // 次の攻撃
         }
 
-        this.patternTimer++;
-        this.angle += 0.02;
-
-        // ノーマルスピードでプレイヤーに突進する
-        const bossSpeed = 1.5;
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        const dist = Math.hypot(dx, dy) || 1;
-        this.x += (dx / dist) * bossSpeed * speedMult;
-        this.y += (dy / dist) * bossSpeed * speedMult;
+        // 陣形維持 (少し左右に揺れる)
+        this.x = canvas.width / 2 + Math.sin(Date.now() / 1000) * 100;
     }
 
     draw() {
@@ -2384,6 +2294,8 @@ function createVortex(x, y) {
 function startGame() {
     hp = MAX_HP;
     hackGauge = 0;
+    energyGauge = 0; // リセット
+    player.subShipAutoMode = true; // リセット
     score = 0;
     gameOver = false;
     gameActive = true;
@@ -2391,8 +2303,8 @@ function startGame() {
     hackingStack = []; // 通常モード開始時にスタックをリセット
     player.x = canvas.width / 2;
     player.y = canvas.height / 2;
-    
-    player.activeModules = []; 
+
+    player.activeModules = [];
     player.barrierTimer = 0;
     player.isTimeStopped = false;
     player.isInvincible = false;
@@ -2405,7 +2317,7 @@ function startGame() {
     player.bossTimeElapsed = 0;
     playerPowerLevel = 0;
     currentHackMemory = 0;
-    
+
     // 永続強化の適用
     MAX_HACK_MEMORY = isEasyMode ? 99999 : 400; // イージーモード時は無制限
     if (isTowerMode) {
@@ -2428,7 +2340,7 @@ function startGame() {
 
     slowTimer = 0;
     startTime = Date.now();
-    enemies = []; bullets = []; enemyBullets = []; bits = []; particles = []; vortices = [];
+    enemies = []; bullets = []; enemyBullets = []; bits = []; particles = []; vortices = []; threads = [];
     turrets = []; decoys = []; portals = []; lightningStrikes = [];
 
     document.getElementById('home-screen').classList.add('hidden');
@@ -2532,14 +2444,22 @@ function update() {
     lastTime = now;
     updateUI(); // スコア更新後にUI反映
 
-    // タワーモードのフロアクリア判定 (30秒でクリア)
-    if (isTowerMode) {
-        const floorGoal = (towerState.currentFloor === 30) ? 9999 : 30; 
-        if (score >= floorGoal) {
-            towerState.bits = playerBits; // ビットを次フロアへ持ち越し
-            TowerManager.clearFloor();
+    // タワーモードのフロアクリア判定 (ボス撃破)
+    if (isTowerMode && !towerState.isClearing) {
+        const boss = enemies.find(e => e.isBoss);
+        if (boss && boss.hp <= 0) {
+            towerState.isClearing = true;
+            addLog("▶ MISSION_COMPLETE: BOSS_NEUTRALIZED", "hack");
+            setTimeout(() => {
+                towerState.bits = playerBits;
+                TowerManager.clearFloor();
+            }, 3000);
         }
     }
+
+    // プレイヤー位置を固定 (下側)
+    player.y = canvas.height - 100;
+    player.x = canvas.width / 2;
 
     // 自動での早期クリア判定を削除 (ボス3体目撃破でクリアになる)
 
@@ -2553,7 +2473,7 @@ function update() {
     }
     if (player.barrierTimer > 0) player.barrierTimer--;
     if (bulletHitRecently > 0) bulletHitRecently--; // タイマーのデクリメント追加
-    
+
     if (towerState.skillCooldown > 0) {
         towerState.skillCooldown--;
     }
@@ -2572,22 +2492,31 @@ function update() {
     player.moveX = 0;
     player.moveY = 0;
 
-    // 自動連射 (常に射撃)
-    if (player.hasCompress) {
-        player.chargeLevel = Math.min(100, (player.chargeLevel || 0) + 2 * (1 + (player.fireRateBonus || 0)));
-        if (player.chargeLevel >= 100) {
-            fireBullets(now, 1.0);
-            player.chargeLevel = 0;
-            player.lastFireTime = now;
+    // 新メイン攻撃：スレッド（糸）射出 (制限撤廃)
+    if (keys[' '] || keys['Space']) {
+        const activeThreads = (typeof threads !== "undefined" ? threads : []).filter(t => t.active || Math.hypot(t.x - (t.originX || player.x), t.y - (t.originY || player.y)) > 0).length;
+        const threadCooldown = 150 * (1 - (player.threadRateBonus || 0));
+        if (now - (player.lastThreadTime || 0) > threadCooldown) {
+            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            const speed = 15 * (1 + (player.threadSpeedBonus || 0));
+            threads.push({
+                originX: player.x, originY: player.y,
+                x: player.x, y: player.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                active: false,
+                target: null,
+                life: 80 + (player.threadMaxLengthBonus || 0),
+                baseLife: 80 + (player.threadMaxLengthBonus || 0),
+                width: 2 + (player.threadWidthBonus || 0),
+                isHoming: player.hasThreadHoming || false,
+                drainRate: 0.5 * (1 + (player.drainSpeedBonus || 0)),
+                ownerType: 'player'
+            });
+            player.lastThreadTime = now;
         }
-    } else {
-        const shootReady = !player.lastFireTime || now - player.lastFireTime > player.fireRate;
-        if (shootReady && !player.isTimeStopped && player.disarmedTimer <= 0) {
-            fireBullets(now);
-            player.lastFireTime = now;
-        }
-        player.chargeLevel = 0;
     }
+    // ワンタップ射出化：離した瞬間の削除を廃止
 
     // Reboot Step: Invincibility Timer
     if (player.invincibleTimer > 0) {
@@ -2601,24 +2530,56 @@ function update() {
         player.lastFireTime = now; // Prevent firing
     }
 
-    // Sキー: ハッキング (通常モード) または スキル発動 (タワーモード)
-    if (keys['s'] || keys['S']) {
+    // Cキー: ハッキング (通常モード)
+    if (keys['c'] || keys['C']) {
         if (!isTowerMode) {
             if (hackGauge >= 100 && !isHacking) {
                 openHackingScreen();
+            }
+        }
+    }
+
+    // Sキー: コンパイル (タワーモードのスキル等もここに統合可能)
+    if (keys['s'] || keys['S']) {
+        if (!isTowerMode) {
+            if (now - (player.lastCompileTime || 0) > 1000) {
+                executeCompile(now);
+                player.lastCompileTime = now;
             }
         } else {
             // タワーモードのスキル発動 (HackGauge 100%消費)
             if (player.currentTowerSkill && hackGauge >= 100 && gameActive && !gameOver) {
                 if (player.currentTowerSkill === 'missile_strike') {
-                    // Start targeting mode directly (doesn't consume gauge until fired)
                     activateTowerSkill('missile_strike');
                 } else {
                     activateTowerSkill(player.currentTowerSkill);
-                    hackGauge = 0; // ゲージ消費
+                    hackGauge = 0;
                 }
-                keys['s'] = false; keys['S'] = false; // 連続発動防止
+                keys['s'] = false; keys['S'] = false;
             }
+        }
+    }
+
+    // Shiftキー: サブ機召喚モード切替 (Auto / Manual)
+    if (keys['Shift']) {
+        player.subShipAutoMode = !player.subShipAutoMode;
+        addLog(`▶ SUB_SHIP_MODE: ${player.subShipAutoMode ? 'AUTO' : 'MANUAL'}`, "hack");
+        keys['Shift'] = false;
+    }
+
+    // Aキー: 一斉起爆 (Detonate)
+    if ((keys['a'] || keys['A'])) {
+        triggerDetonation();
+        keys['a'] = false; keys['A'] = false;
+    }
+
+    // オート召喚ロジック (Autoモード時)
+    if (player.subShipAutoMode && energyGauge >= 50 && (player.subShips || 0) < 4) {
+        if (now - (player.lastSubShipTime || 0) > 1000) {
+            energyGauge -= 50;
+            player.subShips = (player.subShips || 0) + 1;
+            addLog(`▶ AUTO_SUMMON: SUB_SHIP`, "hack");
+            player.lastSubShipTime = now;
         }
     }
 
@@ -2634,9 +2595,56 @@ function update() {
         }
     }
 
-    // 敵スポーン (難易度大幅アップ: レベルとボス撃破数で相乗効果)
-    const towerSpawnMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.02) : 1.0; // 0.03 -> 0.02 (更なる緩和)
-    const dynamicSpawnRate = ENEMY_SPAWN_RATE * (1 + playerPowerLevel * 2.0) * (1 + bossesDefeated * 0.8) * towerSpawnMult;
+    // サブ機によるスレッド支援 (敵を拘束 & プレイヤーをサポート)
+    if ((player.subShips || 0) > 0) {
+        for (let i = 0; i < player.subShips; i++) {
+            const angle = (now / 1000) + (i * Math.PI * 2 / player.subShips);
+            const sx = player.x + Math.cos(angle) * 60;
+            const sy = player.y + Math.sin(angle) * 60;
+
+            // 防御判定 (敵弾の消去)
+            enemyBullets = enemyBullets.filter(eb => {
+                if (Math.hypot(eb.x - sx, eb.y - sy) < 30) {
+                    createExplosion(eb.x, eb.y, '#0ff', 0.5);
+                    return false;
+                }
+                return true;
+            });
+
+            // スレッド射出支援 (一定間隔で最も近い未接続の敵を狙う)
+            if (enemies.length > 0 && now % 500 < 20) {
+                // まだ接続されていない敵を優先
+                let target = null;
+                let minDist = 300;
+                for (let e of enemies) {
+                    if (e.isAlly || e.isBoss) continue;
+                    const d = Math.hypot(e.x - sx, e.y - sy);
+                    if (d < minDist) { minDist = d; target = e; }
+                }
+                if (target) {
+                    const tAngle = Math.atan2(target.y - sy, target.x - sx);
+                    threads.push({
+                        originX: sx, originY: sy,
+                        x: sx, y: sy,
+                        vx: Math.cos(tAngle) * 12,
+                        vy: Math.sin(tAngle) * 12,
+                        active: false,
+                        target: null,
+                        life: 100, baseLife: 100,
+                        width: 1.5,
+                        isHoming: true,
+                        drainRate: 0.3,
+                        ownerType: 'subship',
+                        ownerId: `subship_${i}`
+                    });
+                }
+            }
+        }
+    }
+
+    // 敵スポーン (難易度調整: 出現率と倍率を大幅抑制)
+    const towerSpawnMult = isTowerMode ? (1 + (towerState.currentFloor - 1) * 0.01) : 1.0; // 0.02 -> 0.01
+    const dynamicSpawnRate = (ENEMY_SPAWN_RATE * 0.7) * (1 + playerPowerLevel * 0.5) * (1 + bossesDefeated * 0.2) * towerSpawnMult;
     if (Math.random() < dynamicSpawnRate) {
         enemies.push(new Enemy());
     }
@@ -2656,6 +2664,7 @@ function update() {
     }
 
     // 更新処理
+    if (typeof updateThreads === 'function') updateThreads(now);
     updateProjectiles(now);
     updateTowerMissiles();
     updateEnemies();
@@ -2744,6 +2753,246 @@ function update() {
     }
 }
 
+function triggerDetonation() {
+    let explodedAny = false;
+    let totalBlastDamage = 0;
+    const boss = enemies.find(e => e.isBoss);
+
+    enemies.forEach(e => {
+        if (e.isBoss) return;
+        const connectedThreads = (typeof threads !== "undefined" ? threads : []).filter(t => t.active && t.target === e);
+        const count = connectedThreads.length;
+
+        if (count > 0) {
+            // ダメージ計算: (基本50 + 接続数 * 50) * 接続数 (垂直爆破シナジー効果)
+            const damage = (50 + count * 50) * count;
+            e.hp = -1; // 爆破消滅
+            totalBlastDamage += damage;
+            explodedAny = true;
+
+            // 演出: 敵からボスへのエネルギーライン
+            if (boss) {
+                for (let i = 0; i < 5; i++) {
+                    particles.push({
+                        x: e.x, y: e.y,
+                        vx: (boss.x - e.x) / 20 + (Math.random() - 0.5) * 5,
+                        vy: (boss.y - e.y) / 20 + (Math.random() - 0.5) * 5,
+                        color: count > 3 ? '#ffdd00' : '#0ff',
+                        life: 20
+                    });
+                }
+            }
+
+            createExplosion(e.x, e.y, '#f00', 30 * count);
+            connectedThreads.forEach(t => { t.life = 0; });
+        }
+    });
+
+    if (explodedAny && boss) {
+        boss.hp -= totalBlastDamage;
+        screenShake = Math.min(40, 10 + (totalBlastDamage / 50));
+        addLog(`▶ OVERLOAD_BLAST -> BOSS: ${Math.floor(totalBlastDamage)} DMG`, "hack");
+    } else if (!boss) {
+        addLog("▶ ERROR: BOSS_NOT_DETECTED", "error");
+    } else {
+        addLog("▶ ERROR: NO_NODE_CONNECTED", "error");
+    }
+}
+
+function updateThreads(now) {
+    if (typeof threads === "undefined") return;
+
+    const activeThreads = threads.filter(t => t.active);
+
+    threads = threads.filter(t => {
+        if (!t.active) {
+            t.x += t.vx;
+            t.y += t.vy;
+            let ox = player.x; let oy = player.y;
+            if (t.ownerId && t.ownerId.startsWith('subship_')) {
+                const i = parseInt(t.ownerId.split('_')[1]);
+                const angle = (now / 1000) + (i * Math.PI * 2 / Math.max(1, player.subShips || 1));
+                ox = player.x + Math.cos(angle) * 50;
+                oy = player.y + Math.sin(angle) * 50;
+            }
+            const dist = Math.hypot(t.x - ox, t.y - oy);
+            if (dist > t.baseLife * 10) return false;
+
+            let hitEnemy = null;
+            for (let e of enemies) {
+                if (Math.hypot(e.x - t.x, e.y - t.y) < 20 + t.width) {
+                    hitEnemy = e;
+                    break;
+                }
+            }
+            if (hitEnemy) {
+                t.active = true;
+                t.target = hitEnemy;
+            }
+
+            if (t.isHoming && !t.active) {
+                let nearest = null;
+                let minDist = 300;
+                for (let e of enemies) {
+                    const d = Math.hypot(e.x - t.x, e.y - t.y);
+                    if (d < minDist) { minDist = d; nearest = e; }
+                }
+                if (nearest) {
+                    const angle = Math.atan2(nearest.y - t.y, nearest.x - t.x);
+                    const speed = Math.hypot(t.vx, t.vy);
+                    t.vx += Math.cos(angle) * speed * 0.1;
+                    t.vy += Math.sin(angle) * speed * 0.1;
+                    const newSpeed = Math.hypot(t.vx, t.vy);
+                    t.vx = (t.vx / newSpeed) * speed;
+                    t.vy = (t.vy / newSpeed) * speed;
+                }
+            }
+        } else {
+            if (!t.target || t.target.hp <= 0 || !enemies.includes(t.target)) {
+                return false;
+            }
+            t.x = t.target.x;
+            t.y = t.target.y;
+            t.target.isTethered = true; // 敵の移動を停止
+
+            // ハッキング進捗の蓄積 (ダメージは与えない)
+            if (!t.target.isAlly) {
+                t.target.hackingProgress = Math.min(1, (t.target.hackingProgress || 0) + (t.drainRate || 0.5) * 0.05);
+                if (t.target.hackingProgress >= 1) {
+                    t.target.isAlly = true;
+                    towerState.dominatedCount = (towerState.dominatedCount || 0) + 1; // 支配数加算
+                    addLog(`▶ SYSTEM_DOMINATED: ${t.target.targetId || 'NODE'}`, "hack");
+                    createExplosion(t.target.x, t.target.y, '#0ff', 10);
+                }
+            }
+
+            hackGauge = Math.min(100, (hackGauge || 0) + t.drainRate * 0.5);
+            energyGauge = Math.min(100, (energyGauge || 0) + t.drainRate * 2.0);
+            score += t.drainRate * 10;
+
+            if (Math.random() < 0.2) {
+                particles.push({
+                    x: t.target.x,
+                    y: t.target.y,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    color: t.target.isAlly ? '#0ff' : '#f00',
+                    life: 20,
+                    size: 2
+                });
+            }
+        }
+        return true;
+    });
+}
+
+function drawThreads(ctx) {
+    if (typeof threads === "undefined") return;
+    const now = Date.now();
+    threads.forEach(t => {
+        let ox = t.originX || player.x;
+        let oy = t.originY || player.y;
+
+        // 接続相手がいる場合、起点をオーナーの現在位置に更新 (動くサブ機など)
+        if (t.ownerId && t.ownerId.startsWith('subship_')) {
+            const idx = parseInt(t.ownerId.split('_')[1]);
+            const angle = (now / 1000) + (idx * Math.PI * 2 / Math.max(1, player.subShips));
+            ox = player.x + Math.cos(angle) * 60;
+            oy = player.y + Math.sin(angle) * 60;
+        } else if (t.ownerType === 'player') {
+            ox = player.x; oy = player.y;
+        }
+        if (t.ownerId && t.ownerId.startsWith('subship_')) {
+            const i = parseInt(t.ownerId.split('_')[1]);
+            const angle = (now / 1000) + (i * Math.PI * 2 / Math.max(1, player.subShips || 1));
+            ox = player.x + Math.cos(angle) * 50;
+            oy = player.y + Math.sin(angle) * 50;
+        } else if (t.ownerId && t.ownerId.startsWith('ally_')) {
+            // 味方機（Viral Hacking）のスレッド起点
+            const ally = enemies.find(e => e.isAlly && e.targetId === t.ownerId.split('_')[1]);
+            if (ally) { ox = ally.x; oy = ally.y; }
+        }
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        ctx.lineTo(t.x, t.y);
+        // ハッキング中は進捗に応じた色
+        if (t.active && t.target) {
+            const r = Math.floor(255 * (1 - t.target.hackingProgress));
+            const g = Math.floor(255 * t.target.hackingProgress);
+            ctx.strokeStyle = `rgb(${r}, ${g}, 255)`;
+        } else {
+            ctx.strokeStyle = '#4444ff';
+        }
+        ctx.lineWidth = t.width || 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, t.width * 2, 0, Math.PI * 2);
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fill();
+    });
+}
+
+function executeCompile(now) {
+    if (typeof threads === "undefined" || threads.length === 0) return;
+
+    let cost = 100;
+    if (Math.random() * 100 < (player.compileFreeChance || 0)) {
+        cost = 0;
+        addLog("▶ ENERGY_SAVED (FREE COMPILE)", "hack");
+    }
+
+    if (hackGauge < cost) {
+        addLog(`▶ ENERGY_LOW: コンパイル不可 (Need ${cost}%)`, "error");
+        return;
+    }
+    hackGauge -= cost;
+
+    let compileDamage = 150 * (1 + (player.compileDamageBonus || 0));
+    let explosionSize = 60 * (1 + (player.compileSizeBonus || 0));
+    let isCrit = Math.random() < (player.compileCritChance || 0);
+
+    if (isCrit) compileDamage *= 2;
+
+    const connectedTargets = [];
+    threads.forEach(t => {
+        if (t.active && t.target) {
+            if (!connectedTargets.includes(t.target)) connectedTargets.push(t.target);
+            if (t.chains) {
+                t.chains.forEach(c => {
+                    if (!connectedTargets.includes(c)) connectedTargets.push(c);
+                });
+            }
+        }
+    });
+
+    if (connectedTargets.length > 0) {
+        addLog(isCrit ? "▶ CRITICAL COMPILE!" : "▶ COMPILE EXECUTED", "hack");
+    }
+
+    connectedTargets.forEach(target => {
+        target.hp -= compileDamage;
+        createExplosion(target.x, target.y, '#ff4444', explosionSize / 30);
+
+        enemies.forEach(e => {
+            if (e !== target && Math.hypot(e.x - target.x, e.y - target.y) < explosionSize) {
+                e.hp -= compileDamage * 0.5;
+            }
+        });
+
+        if (target.hp > 0 && player.hasCompilePursuit) {
+            setTimeout(() => {
+                if (enemies.includes(target) && target.hp > 0) {
+                    target.hp -= compileDamage * 0.3;
+                    createExplosion(target.x, target.y, '#ff8800', 1);
+                }
+            }, 300);
+        }
+    });
+
+    threads = [];
+}
+
 function fireBullets(now, chargeScale = 0) {
     let bulletSpeed = 10 * player.bulletSpeedMult;
     let bulletSize = 1 * player.bulletSizeMult;
@@ -2755,7 +3004,7 @@ function fireBullets(now, chargeScale = 0) {
     // タワーモード倍率
     if (isTowerMode) {
         damageMult *= (player.towerDamageMult || 1.0);
-        
+
         // クリティカル判定
         if (Math.random() * 100 < (player.towerCritChance || 0)) {
             damageMult *= 3.0; // クリティカルは3倍
@@ -2795,10 +3044,10 @@ function fireBullets(now, chargeScale = 0) {
         bulletSize *= (1 + chargeScale * 3);
         count = 1; // 1つに凝縮
     }
-    
+
     let targetX = mouseX;
     let targetY = mouseY;
-    
+
     // オートエイム機能 [system-auto-fire]
     if (player.autoFire) {
         let nearestEnemy = null;
@@ -2882,24 +3131,24 @@ function fireBullets(now, chargeScale = 0) {
 
     if (player.isRearShot) {
         const rearAngle = baseAngle + Math.PI;
-        bullets.push({ 
-            x: player.x, y: player.y, 
+        bullets.push({
+            x: player.x, y: player.y,
             vx: Math.cos(rearAngle) * bulletSpeed, vy: Math.sin(rearAngle) * bulletSpeed,
-            baseVx: Math.cos(rearAngle) * bulletSpeed, baseVy: Math.sin(rearAngle) * bulletSpeed, 
-            color: '#f0f', size: 1.0, life: 180, time: 0 
+            baseVx: Math.cos(rearAngle) * bulletSpeed, baseVy: Math.sin(rearAngle) * bulletSpeed,
+            color: '#f0f', size: 1.0, life: 180, time: 0
         });
     }
 
     // サブ機の射撃もプロパティ継承
     for (let i = 0; i < player.subShips; i++) {
         const offset = (i + 1) * 30 * (i % 2 === 0 ? 1 : -1);
-        const subX = player.x + Math.cos(baseAngle + Math.PI/2) * offset;
-        const subY = player.y + Math.sin(baseAngle + Math.PI/2) * offset;
+        const subX = player.x + Math.cos(baseAngle + Math.PI / 2) * offset;
+        const subY = player.y + Math.sin(baseAngle + Math.PI / 2) * offset;
         bullets.push({
             x: subX, y: subY,
-            vx: Math.cos(baseAngle) * bulletSpeed, 
+            vx: Math.cos(baseAngle) * bulletSpeed,
             vy: Math.sin(baseAngle) * bulletSpeed,
-            baseVx: Math.cos(baseAngle) * bulletSpeed, 
+            baseVx: Math.cos(baseAngle) * bulletSpeed,
             baseVy: Math.sin(baseAngle) * bulletSpeed,
             color: '#0f4', size: bulletSize, life: 180, time: 0,
             isPiercing: player.isPiercing, isExplosion: player.isExplosion
@@ -2913,7 +3162,7 @@ function updateTowerMissiles() {
         m.x = m.startX + (m.targetX - m.startX) * m.progress;
         // Parabolic arc for vertical Y
         m.y = m.startY + (m.targetY - m.startY) * m.progress - Math.sin(m.progress * Math.PI) * 200;
-        
+
         if (m.progress >= 1) {
             createExplosion(m.targetX, m.targetY, '#f80', 250);
             createExplosion(m.targetX, m.targetY, '#fff', 150);
@@ -2931,7 +3180,7 @@ function updateTowerMissiles() {
 
 function activateTowerSkill(skillId) {
     if (!gameActive) return;
-    
+
     switch (skillId) {
         case 'debugger_shield':
             player.hasDebuggerShield = true;
@@ -2941,8 +3190,8 @@ function activateTowerSkill(skillId) {
         case 'overclock':
             player.isOverclocked = true;
             addLog("SKILL: オーバークロック開始", "hack");
-            setTimeout(() => { 
-                player.isOverclocked = false; 
+            setTimeout(() => {
+                player.isOverclocked = false;
                 player.isCoolingDown = true;
                 addLog("OVERCLOCK_END: 冷却状態", "error");
                 setTimeout(() => {
@@ -3171,131 +3420,135 @@ function updateProjectiles(now) {
 
         // 當たり判定
         for (let e of enemies) {
-            if (Math.hypot(e.x - b.x, e.y - b.y) < 20 + b.size * 5) {
-                // 多段ヒット判定 (ドリル)
-                if (b.isDrill) {
-                    const lastHit = b.hitEnemies.get(e) || 0;
-                    if (b.time - lastHit < 10) continue; // 10フレーム間隔でヒット
-                    b.hitEnemies.set(e, b.time);
-                }
-
-                // 特殊効果
-                if (b.isFreeze) e.freezeTimer = 180;
-                if (b.isPoison) e.poisonTimer = 300;
-
-                if (b.isChainAdv || b.isChain) {
-                    const jumpDist = b.isChainAdv ? 180 : 120;
-                    enemies.forEach(e2 => {
-                        if (e !== e2 && Math.hypot(e2.x - e.x, e2.y - e.y) < jumpDist) {
-                            e2.hp -= (b.isChainAdv ? 1.0 : 0.5) * (b.damage || 1);
-                            createExplosion(e2.x, e2.y, '#0ff', 2);
-                            // 雷撃ビジュアル (簡易)
-                            lightningStrikes.push({ x1: e.x, y1: e.y, x2: e2.x, y2: e2.y, life: 10 });
-                        }
-                    });
-                }
-
-                if (b.isShrink) {
-                    e.isShrink = true;
-                    e.hp -= 1;
-                }
-
-                if (b.isLightning) {
-                    createLightning(b.x, b.y, b.lightningChain || 3);
-                }
-
-                // 塔モード特殊効果: ノックバック・麻痺・毒
-                if (b.knockback) {
-                    const angle = Math.atan2(e.y - b.y, e.x - b.x);
-                    e.x += Math.cos(angle) * b.knockback;
-                    e.y += Math.sin(angle) * b.knockback;
-                }
-                if (b.stunDuration) e.freezeTimer = Math.max(e.freezeTimer || 0, b.stunDuration);
-                if (b.poisonMult > 1.0) { e.poisonTimer = 300; e.poisonDamageMult = b.poisonMult; }
-                if (b.defDown) { e.vulnerableTimer = 180; e.defDownMult = (e.defDownMult || 1.0) * (1 + b.defDown); }
-
-                // ダメージ適用 (Blood Pact・Drillの係数 + デコイシナジー + 残響 + タワーボス補正)
-                let damage = (b.damage || 1) * (player.decoyDamageBoost || 1) * (e.vulnerableTimer > 0 ? 1.5 : 1.0);
-                if (e.isBoss && b.towerBossDamageMult) damage *= b.towerBossDamageMult;
-                
-                if (player.isTimeStopped) {
-                    e.frozenDamage = (e.frozenDamage || 0) + damage;
-                } else {
-                    e.hp -= damage;
-                }
-
-                // 生命吸収 [towerLifeSteal]
-                if (player.towerLifeSteal) {
-                    hp = Math.min(player.towerMaxHP || MAX_HP, hp + damage * player.towerLifeSteal);
-                }
-
-                // Malware Stack (浸食)
-                if (player.hasMalware) {
-                    e.noiseLevel = (e.noiseLevel || 0) + 1;
-                    if (e.noiseLevel > 30) e.isSelfDestruct = true;
-                }
-                bulletHitRecently = 10;
-                b.justHit = true; // 今回のフレームでヒットしたフラグ
-
-                // 即時ロジック評価 (IF 敵に当たった THEN ...)
-                applyDynamicLogic(b);
-
-                if (b.isExplosion) {
-                    createExplosion(b.x, b.y, '#f50', 15);
-                    // 反射ボムコンボ：反射するごとに爆発する
-                    if (!b.isReflecting && !b.isBouncing) {
-                        if (!b.isDrill) return false; // ドリルでなければ消滅
+            // 自分自身や味方は撃たない
+            if (b.attacker === 'ally' && e.isAlly) continue;
+            if (!e.isAlly && (b.attacker === 'player' || b.attacker === 'subship' || b.attacker === 'ally')) {
+                if (Math.hypot(e.x - b.x, e.y - b.y) < e.w / 2 + b.size * 5) {
+                    // 多段ヒット判定 (ドリル)
+                    if (b.isDrill) {
+                        const lastHit = b.hitEnemies.get(e) || 0;
+                        if (b.time - lastHit < 10) continue; // 10フレーム間隔でヒット
+                        b.hitEnemies.set(e, b.time);
                     }
 
-                    // 反射中の爆発ダメージ
-                    enemies.forEach(e2 => {
-                        if (Math.hypot(e2.x - b.x, e2.y - b.y) < 120 && e !== e2) {
-                            e2.hp -= 1 * (b.damage || 1);
-                        }
-                    });
-                }
+                    // 特殊効果
+                    if (b.isFreeze) e.freezeTimer = 180;
+                    if (b.isPoison) e.poisonTimer = 300;
 
-                if (b.isSplitting) {
-                    const sc = b.splitCount || 2;
-                    for (let j = 0; j < sc; j++) {
-                        const child = Object.assign({}, b);
-                        const angle = (Math.PI * 2 / sc) * j;
-                        child.vx = Math.cos(angle) * 8;
-                        child.vy = Math.sin(angle) * 8;
-                        child.life = 120;
-                        child.time = 0;
-                        child.isSplitting = false;
-                        child.hitEnemies = new Map();
-                        bullets.push(child);
-                    }
-                    if (!b.isDrill) return false;
-                }
-
-                if (b.isPiercing) {
-                    if (b.pierceCount > 0) {
-                        b.pierceCount--;
-                        b.hitEnemies.set(e, b.time); // 貫通時も同一フレームでの多重ヒット防止
-                    } else {
-                        if (!b.isDrill) return false;
-                    }
-                } else if (!b.isLaser && !b.isDrill) {
-                    // 破片飛散 [hasFrag]
-                    if (b.hasFrag) {
-                        for (let j = 0; j < 3 + b.fragLevel; j++) {
-                            const fAngle = Math.random() * Math.PI * 2;
-                            bullets.push({
-                                x: b.x, y: b.y, vx: Math.cos(fAngle) * 5, vy: Math.sin(fAngle) * 5,
-                                color: '#ff0', size: 0.5, life: 30, damage: b.damage * 0.3
-                            });
-                        }
-                    }
-                    // 残火発生 [hasBurn]
-                    if (b.hasBurn) {
-                        particles.push({
-                            x: b.x, y: b.y, vx: 0, vy: 0, life: 120, type: 'burn_floor', level: b.burnLevel
+                    if (b.isChainAdv || b.isChain) {
+                        const jumpDist = b.isChainAdv ? 180 : 120;
+                        enemies.forEach(e2 => {
+                            if (e !== e2 && Math.hypot(e2.x - e.x, e2.y - e.y) < jumpDist) {
+                                e2.hp -= (b.isChainAdv ? 1.0 : 0.5) * (b.damage || 1);
+                                createExplosion(e2.x, e2.y, '#0ff', 2);
+                                // 雷撃ビジュアル (簡易)
+                                lightningStrikes.push({ x1: e.x, y1: e.y, x2: e2.x, y2: e2.y, life: 10 });
+                            }
                         });
                     }
-                    return false;
+
+                    if (b.isShrink) {
+                        e.isShrink = true;
+                        e.hp -= 1;
+                    }
+
+                    if (b.isLightning) {
+                        createLightning(b.x, b.y, b.lightningChain || 3);
+                    }
+
+                    // 塔モード特殊効果: ノックバック・麻痺・毒
+                    if (b.knockback) {
+                        const angle = Math.atan2(e.y - b.y, e.x - b.x);
+                        e.x += Math.cos(angle) * b.knockback;
+                        e.y += Math.sin(angle) * b.knockback;
+                    }
+                    if (b.stunDuration) e.freezeTimer = Math.max(e.freezeTimer || 0, b.stunDuration);
+                    if (b.poisonMult > 1.0) { e.poisonTimer = 300; e.poisonDamageMult = b.poisonMult; }
+                    if (b.defDown) { e.vulnerableTimer = 180; e.defDownMult = (e.defDownMult || 1.0) * (1 + b.defDown); }
+
+                    // ダメージ適用 (Blood Pact・Drillの係数 + デコイシナジー + 残響 + タワーボス補正)
+                    let damage = (b.damage || 1) * (player.decoyDamageBoost || 1) * (e.vulnerableTimer > 0 ? 1.5 : 1.0);
+                    if (e.isBoss && b.towerBossDamageMult) damage *= b.towerBossDamageMult;
+
+                    if (player.isTimeStopped) {
+                        e.frozenDamage = (e.frozenDamage || 0) + damage;
+                    } else {
+                        e.hp -= damage;
+                    }
+
+                    // 生命吸収 [towerLifeSteal]
+                    if (player.towerLifeSteal) {
+                        hp = Math.min(player.towerMaxHP || MAX_HP, hp + damage * player.towerLifeSteal);
+                    }
+
+                    // Malware Stack (浸食)
+                    if (player.hasMalware) {
+                        e.noiseLevel = (e.noiseLevel || 0) + 1;
+                        if (e.noiseLevel > 30) e.isSelfDestruct = true;
+                    }
+                    bulletHitRecently = 10;
+                    b.justHit = true; // 今回のフレームでヒットしたフラグ
+
+                    // 即時ロジック評価 (IF 敵に当たった THEN ...)
+                    applyDynamicLogic(b);
+
+                    if (b.isExplosion) {
+                        createExplosion(b.x, b.y, '#f50', 15);
+                        // 反射ボムコンボ：反射するごとに爆発する
+                        if (!b.isReflecting && !b.isBouncing) {
+                            if (!b.isDrill) return false; // ドリルでなければ消滅
+                        }
+
+                        // 反射中の爆発ダメージ
+                        enemies.forEach(e2 => {
+                            if (Math.hypot(e2.x - b.x, e2.y - b.y) < 120 && e !== e2) {
+                                e2.hp -= 1 * (b.damage || 1);
+                            }
+                        });
+                    }
+
+                    if (b.isSplitting) {
+                        const sc = b.splitCount || 2;
+                        for (let j = 0; j < sc; j++) {
+                            const child = Object.assign({}, b);
+                            const angle = (Math.PI * 2 / sc) * j;
+                            child.vx = Math.cos(angle) * 8;
+                            child.vy = Math.sin(angle) * 8;
+                            child.life = 120;
+                            child.time = 0;
+                            child.isSplitting = false;
+                            child.hitEnemies = new Map();
+                            bullets.push(child);
+                        }
+                        if (!b.isDrill) return false;
+                    }
+
+                    if (b.isPiercing) {
+                        if (b.pierceCount > 0) {
+                            b.pierceCount--;
+                            b.hitEnemies.set(e, b.time); // 貫通時も同一フレームでの多重ヒット防止
+                        } else {
+                            if (!b.isDrill) return false;
+                        }
+                    } else if (!b.isLaser && !b.isDrill) {
+                        // 破片飛散 [hasFrag]
+                        if (b.hasFrag) {
+                            for (let j = 0; j < 3 + b.fragLevel; j++) {
+                                const fAngle = Math.random() * Math.PI * 2;
+                                bullets.push({
+                                    x: b.x, y: b.y, vx: Math.cos(fAngle) * 5, vy: Math.sin(fAngle) * 5,
+                                    color: '#ff0', size: 0.5, life: 30, damage: b.damage * 0.3
+                                });
+                            }
+                        }
+                        // 残火発生 [hasBurn]
+                        if (b.hasBurn) {
+                            particles.push({
+                                x: b.x, y: b.y, vx: 0, vy: 0, life: 120, type: 'burn_floor', level: b.burnLevel
+                            });
+                        }
+                        return false;
+                    }
                 }
             }
         }
@@ -3369,7 +3622,7 @@ function updateEnemies() {
         });
 
         if (e.hp <= 0) {
-            if (typeof e.die === 'function') Object; 
+            if (typeof e.die === 'function') Object;
             if (player.corpseExplosion) {
                 createExplosion(e.x, e.y, '#f00', 5);
                 for (let e2 of enemies) { if (Math.hypot(e2.x - e.x, e2.y - e.y) < 80) e2.hp -= 1; }
@@ -3502,7 +3755,7 @@ function draw() {
     ctx.save();
     // モーションブラーのための半透明黒クリア
     ctx.globalCompositeOperation = 'source-over';
-    
+
     // Code Burst 演出
     if (player.isTimeStopped) {
         ctx.fillStyle = 'rgba(0, 5, 0, 0.8)'; // 暗め
@@ -3561,7 +3814,7 @@ function draw() {
     for (let i = 0; i < 6; i++) {
         const a = (i * Math.PI / 3) - Math.PI / 6;
         i === 0 ? ctx.moveTo(Math.cos(a) * hexR, Math.sin(a) * hexR)
-                : ctx.lineTo(Math.cos(a) * hexR, Math.sin(a) * hexR);
+            : ctx.lineTo(Math.cos(a) * hexR, Math.sin(a) * hexR);
     }
     ctx.closePath();
     ctx.fill();
@@ -3592,6 +3845,41 @@ function draw() {
     ctx.fillStyle = '#003300';
     ctx.fillRect(10, -5, 6, 10);
 
+    ctx.restore();
+
+    // 自機直上のステータスバー (HP) - 回転しないようにrestoreの後に配置
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    const barW = 40;
+    const barH = 5;
+    const barY = -40;
+    // HP Bar
+    ctx.fillStyle = 'rgba(0, 50, 0, 0.5)';
+    ctx.fillRect(-barW / 2, barY, barW, barH);
+    ctx.fillStyle = '#00ff41';
+    ctx.fillRect(-barW / 2, barY, barW * (hp / MAX_HP), barH);
+
+    // Thread Stock Indicator (5 dots)
+    const currentActiveThreads = (typeof threads !== "undefined" ? threads : []).filter(t => t.active || Math.hypot(t.x - player.x, t.y - player.y) > 0).length;
+    const maxThreadsCount = 5 + (player.bonusThreads || 0);
+    const dotW = 6;
+    const dotSpacing = 2;
+    const totalDotW = (dotW + dotSpacing) * maxThreadsCount - dotSpacing;
+    const dotY = barY - 8; // HPバーの少し上
+
+    for (let i = 0; i < maxThreadsCount; i++) {
+        const dx = -totalDotW / 2 + i * (dotW + dotSpacing);
+        ctx.fillStyle = (i < currentActiveThreads) ? '#444' : '#0ff'; // 使用中は暗く、ストックはシアン
+        ctx.fillRect(dx, dotY, dotW, 4);
+        if (i >= currentActiveThreads) {
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = '#0ff';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(dx, dotY, dotW, 4);
+            ctx.shadowBlur = 0;
+        }
+    }
     ctx.restore();
 
     // 砲塔中心ドーム
@@ -3630,12 +3918,46 @@ function draw() {
         ctx.stroke();
     }
 
-    // オプション描画
+    // オプション（サブ機）の描画アップグレード
+    const nowMs = Date.now();
     for (let i = 0; i < player.subShips; i++) {
-        const offset = (i + 1) * 30 * (i % 2 === 0 ? 1 : -1);
-        ctx.fillStyle = '#f0f';
-        ctx.fillRect(player.x + offset - 5, player.y - 5, 10, 10);
+        const angle = (nowMs / 1000) + (i * Math.PI * 2 / Math.max(1, player.subShips));
+        const sx = player.x + Math.cos(angle) * 60;
+        const sy = player.y + Math.sin(angle) * 60;
+
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(nowMs / 500); // 自身も回転
+        ctx.strokeStyle = '#0ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // 六角形コアの見た目
+        for (let j = 0; j < 6; j++) {
+            ctx.lineTo(Math.cos(j * Math.PI / 3) * 12, Math.sin(j * Math.PI / 3) * 12);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
+        ctx.fill();
+
+        // 中心部分
+        ctx.beginPath();
+        ctx.arc(0, 0, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.restore();
+
+        // 自機とのリンク線
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.lineTo(sx, sy);
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
     }
+
+    // スレッド描画
+    if (typeof drawThreads === 'function') drawThreads(ctx);
 
     // 弾描画
     bullets.forEach(b => {
@@ -3682,10 +4004,10 @@ function draw() {
     // タワーミサイル描画
     towerMissiles.forEach(m => {
         ctx.fillStyle = '#f80';
-        ctx.beginPath(); ctx.arc(m.x, m.y, 8, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(m.x, m.y, 8, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
         // ターゲット地点を示すレティクル
-        ctx.strokeStyle = '#f00'; ctx.beginPath(); ctx.arc(m.targetX, m.targetY, 250 * m.progress, 0, Math.PI*2); ctx.stroke();
+        ctx.strokeStyle = '#f00'; ctx.beginPath(); ctx.arc(m.targetX, m.targetY, 250 * m.progress, 0, Math.PI * 2); ctx.stroke();
     });
 
     // ターゲット指定モード時のオーバーレイ
@@ -3693,10 +4015,10 @@ function draw() {
         ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#fff'; ctx.font = '24px monospace';
-        ctx.textAlign = 'center'; ctx.fillText(">> SELECT TARGET LOCATION <<", canvas.width/2, canvas.height/2 - 50);
-        
+        ctx.textAlign = 'center'; ctx.fillText(">> SELECT TARGET LOCATION <<", canvas.width / 2, canvas.height / 2 - 50);
+
         ctx.strokeStyle = '#f00'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(mouseX, mouseY, 40, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(mouseX, mouseY, 40, 0, Math.PI * 2); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(mouseX - 50, mouseY); ctx.lineTo(mouseX + 50, mouseY); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(mouseX, mouseY - 50); ctx.lineTo(mouseX, mouseY + 50); ctx.stroke();
     }
@@ -3774,9 +4096,9 @@ function draw() {
         // 十字線 (4方向)
         ctx.beginPath();
         ctx.moveTo(rx, ry - ro - gap); ctx.lineTo(rx, ry - ri);
-        ctx.moveTo(rx, ry + ri);       ctx.lineTo(rx, ry + ro + gap);
+        ctx.moveTo(rx, ry + ri); ctx.lineTo(rx, ry + ro + gap);
         ctx.moveTo(rx - ro - gap, ry); ctx.lineTo(rx - ri, ry);
-        ctx.moveTo(rx + ri, ry);       ctx.lineTo(rx + ro + gap, ry);
+        ctx.moveTo(rx + ri, ry); ctx.lineTo(rx + ro + gap, ry);
         ctx.stroke();
         ctx.restore();
     }
@@ -3791,6 +4113,47 @@ function draw() {
     }
 
     ctx.restore();
+
+    // --- システム演出オーバーレイ ---
+    if (isTowerMode) {
+        // フロア開始演出 (SYSTEM INITIALIZING)
+        if (towerState.startAnimTimer > 0) {
+            towerState.startAnimTimer--;
+            const alpha = Math.min(1, towerState.startAnimTimer / 60);
+            ctx.fillStyle = `rgba(0, 20, 10, ${alpha * 0.8})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.font = 'bold 45px "Courier New", monospace';
+            ctx.fillStyle = `rgba(0, 255, 65, ${alpha})`;
+            ctx.textAlign = 'center';
+            ctx.shadowBlur = 15; ctx.shadowColor = '#0f0';
+            ctx.fillText(`SYSTEM_INITIALIZING_FLOOR_${towerState.currentFloor}`, canvas.width / 2, canvas.height / 2);
+            ctx.font = '16px "Courier New", monospace';
+            ctx.fillText("BOOTING_NEURAL_INTERFACE... SUCCESS", canvas.width / 2, canvas.height / 2 + 40);
+            ctx.shadowBlur = 0;
+        }
+
+        // フロア支配完了演出 (DOMINATION COMPLETE)
+        if (towerState.isClearing) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.font = 'bold 50px "Courier New", monospace';
+            ctx.fillStyle = '#0ff';
+            ctx.textAlign = 'center';
+            ctx.shadowBlur = 20; ctx.shadowColor = '#0ff';
+            ctx.fillText("DOMINATION_COMPLETE", canvas.width / 2, canvas.height / 2);
+            ctx.font = '20px "Courier New", monospace';
+            ctx.fillText("NETWORK_SECURED: ACCESSING_NEXT_SEGMENT...", canvas.width / 2, canvas.height / 2 + 50);
+            ctx.shadowBlur = 0;
+
+            // 画面のグリッチ
+            if (Math.random() < 0.1) {
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
+                ctx.fillRect(0, Math.random() * canvas.height, canvas.width, 2);
+            }
+        }
+    }
 }
 
 function showGameOver() {
