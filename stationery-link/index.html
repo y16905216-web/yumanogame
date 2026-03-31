@@ -84,34 +84,68 @@
         </div>
 
         <!-- Shop Screen -->
-        <div id="view-shop" class="screen">
-            <header class="screen-header">
-                <h2>ショップ (一筆ドロー)</h2>
-            </header>
-            <div class="scroll-content shop-content">
-                <div class="top-status-bar">
-                    <span class="coin-display">💰 <span id="shop-coin-count">0</span></span>
+        <div id="view-shop" class="screen shop-layout">
+            <!-- Top Status Bar (Currency) -->
+            <div class="shop-header">
+                <div class="currency-group">
+                    <span class="currency-item coin">💰 <span id="shop-coin-count">0</span></span>
+                    <span class="currency-item heart">❤️ <span>5/5</span></span>
+                    <span class="currency-item gem">💎 <span>10</span></span>
                 </div>
-                
-                <div class="shop-banner">
-                    <!-- Gacha Selection Tabs -->
-                    <div class="gacha-tabs">
-                        <button class="gacha-tab active" data-gacha="normal">📦<br>ノーマル</button>
-                        <button class="gacha-tab" data-gacha="premium">✨<br>プレミアム</button>
+            </div>
+
+            <!-- Gacha Detail Area (Center) -->
+            <div class="shop-main-display" id="selected-gacha-detail">
+                <div class="gacha-box-visual">
+                    <div class="gacha-box-container">
+                        <span id="main-gacha-emoji" class="box-emoji">📦</span>
+                        <div class="box-chars" id="main-gacha-chars"></div>
                     </div>
-                    
-                    <div id="gacha-info-display">
-                        <h3 id="gacha-title-display">ノーマルガチャ</h3>
-                        <p id="gacha-cost-display">1回 1000コイン</p>
+                </div>
+                <div class="gacha-info">
+                    <h3 id="gacha-title-display">ノーマルガチャ</h3>
+                    <div class="gacha-price-tag">
+                        💰 <span id="gacha-cost-display">1000</span>
                     </div>
-                    
-                    <div class="notebook-canvas-container">
-                        <canvas id="gacha-canvas"></canvas>
-                        <div class="notebook-hint">▲ ここに一筆書きしてください ▲</div>
+                </div>
+                <button id="btn-prepare-gacha" class="paper-btn primary-size draw-btn">引く</button>
+            </div>
+
+            <!-- Shop Footer Area -->
+            <div class="shop-footer">
+                <div class="shop-tabs">
+                    <button class="shop-tab active" data-tab="box">文房具ストア</button>
+                    <button class="shop-tab" data-tab="item">アイテムストア</button>
+                </div>
+                <div class="shop-carousel-container">
+                    <div class="shop-carousel" id="gacha-carousel">
+                        <!-- Populated by JS -->
                     </div>
                 </div>
             </div>
-            
+
+            <!-- Draw Animation Overlay (Notebook Canvas) -->
+            <div id="gacha-draw-overlay" class="hidden">
+                <div class="notebook-canvas-container">
+                    <canvas id="gacha-canvas"></canvas>
+                    <div class="notebook-hint">▲ ここに一筆書きしてください ▲</div>
+                </div>
+                <button id="btn-cancel-draw" class="paper-btn small">もどる</button>
+            </div>
+
+            <!-- Confirmation Modal -->
+            <div id="gacha-confirm-modal" class="hidden overlay-blur">
+                <div class="confirm-content sticky-note">
+                    <h3>確認</h3>
+                    <p><span id="confirm-gacha-name">ノーマルガチャ</span>を</p>
+                    <p>💰 <span id="confirm-gacha-cost">1000</span> で引きますか？</p>
+                    <div class="confirm-btns">
+                        <button id="btn-confirm-ok" class="paper-btn">OK</button>
+                        <button id="btn-confirm-cancel" class="paper-btn secondary">キャンセル</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Result Overlay for Gacha -->
             <div id="gacha-result-overlay" class="hidden">
                 <h2 id="gacha-result-title">New!</h2>
@@ -123,32 +157,57 @@
 
         <!-- Play Screen (Game) -->
         <div id="view-play" class="screen">
-            <header class="game-header">
-                <div class="score-board">
-                    <span class="score-label">SCORE</span>
-                    <span id="score">0</span>
+            <!-- 1. Top Header Area (Curved bottom) -->
+            <header class="game-header-v3">
+                <div class="header-left">
+                    <div class="paper-label-circle">
+                        <span id="time">60</span>
+                    </div>
                 </div>
-                <div class="timer-board">
-                    <span class="timer-label">TIME</span>
-                    <span id="time">60</span>
+                <div class="header-center">
+                    <div class="paper-label-score">
+                        <small>SCORE</small>
+                        <span id="score">0</span>
+                    </div>
+                    <div class="paper-label-coin">
+                        🪙 <span id="game-coin-count">0</span>
+                    </div>
                 </div>
-                <!-- Temporary exit button -->
-                <button id="btn-exit-game" class="exit-btn">やめる</button>
+                <div class="header-right">
+                    <button class="pause-btn-paper" onclick="window.togglePause()">
+                        <span>II</span>
+                    </button>
+                </div>
             </header>
-            <canvas id="game-canvas"></canvas>
-            <div id="effects-layer"></div>
-            
-            <!-- Skill Knock Button -->
-            <div id="skill-btn-wrapper">
-                <div class="skill-gauge-container">
-                    <div id="skill-gauge-fill" class="skill-gauge-fill" style="height: 0%;"></div>
+
+            <!-- 2. Central Play Area -->
+            <div id="game-canvas-area">
+                <canvas id="game-canvas"></canvas>
+                <div id="effects-layer"></div>
+                
+                <div id="pause-overlay" class="pause-overlay hidden">
+                    <div class="pause-content">
+                        <h2>PAUSED</h2>
+                        <p>休憩中...</p>
+                        <div class="pause-btns">
+                            <button class="paper-btn small" onclick="window.togglePause()">再開する</button>
+                            <button id="btn-quit-game" class="paper-btn small secondary">やめる</button>
+                        </div>
+                    </div>
                 </div>
-                <button id="skill-btn" class="knock-btn" disabled>
-                    <div class="knock-top">カチッ</div>
-                    <div class="knock-base"></div>
-                    <div class="knock-icon-img"><img id="skill-char-img" src="" alt="skill"></div>
-                </button>
             </div>
+
+            <!-- 3. Bottom Footer Area (Curved top) -->
+            <footer class="game-footer-v3">
+                <div id="skill-btn-wrapper-v2">
+                    <div class="skill-gauge-container">
+                        <div id="skill-gauge-fill" class="skill-gauge-fill" style="height: 0%;"></div>
+                    </div>
+                    <button id="skill-btn" class="skill-btn-circle" disabled>
+                        <img id="skill-char-img" src="" alt="skill" width="50" height="50">
+                    </button>
+                </div>
+            </footer>
         </div>
 
         <!-- Side Navigation (Sticky Tabs) -->

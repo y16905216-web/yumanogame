@@ -6,42 +6,81 @@ const Engine = Matter.Engine,
       Vector = Matter.Vector;
 
 // Config
-const ITEM_RADIUS = 38; // ツムツムに近い大きめサイズにアップ
-const MAX_ITEMS = 40; // サイズ倍増に伴い画面内限界を調整
-let container = document.getElementById('view-play');
-let CANVAS_WIDTH = container.clientWidth;
-let CANVAS_HEIGHT = container.clientHeight;
+const ITEM_RADIUS = 32; // 改広画面に合わせて38→32へ縮小
+const MAX_ITEMS = 32; // 密度に合わせて40→32へ調整
+let CANVAS_WIDTH = 0;
+let CANVAS_HEIGHT = 0;
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas ? canvas.getContext('2d') : null;
 
 // Engine Setup
 const engine = Engine.create();
 engine.world.gravity.y = 1.2;
 const world = engine.world;
 
-const canvas = document.getElementById('game-canvas');
-canvas.width = CANVAS_WIDTH;
-canvas.height = CANVAS_HEIGHT;
-const ctx = canvas.getContext('2d');
-
-window.addEventListener('resize', () => {
-    CANVAS_WIDTH = container.clientWidth || window.innerWidth;
-    CANVAS_HEIGHT = container.clientHeight || window.innerHeight;
-    if(canvas) {
+function updateCanvasSize() {
+    const container = document.getElementById('game-canvas-area');
+    if (!container || !canvas) return;
+    
+    // Get actual content size (excluding padding)
+    const rect = container.getBoundingClientRect();
+    CANVAS_WIDTH = rect.width;
+    CANVAS_HEIGHT = rect.height;
+    
+    // Only update attributes if they've changed to avoid flickering
+    if (canvas.width !== CANVAS_WIDTH || canvas.height !== CANVAS_HEIGHT) {
         canvas.width = CANVAS_WIDTH;
         canvas.height = CANVAS_HEIGHT;
     }
+}
+updateCanvasSize();
+
+window.addEventListener('resize', () => {
+    updateCanvasSize();
     createWalls();
 });
 
-// Walls
+// Walls - Oval Bowl Style
 let walls = [];
 function createWalls() {
     if (walls.length > 0) Composite.remove(world, walls);
-    const opt = { isStatic: true, friction: 0 };
-    walls = [
-        Bodies.rectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT + 25, CANVAS_WIDTH, 50, opt), // bottom
-        Bodies.rectangle(-25, CANVAS_HEIGHT / 2, 50, CANVAS_HEIGHT * 2, opt), // left
-        Bodies.rectangle(CANVAS_WIDTH + 25, CANVAS_HEIGHT / 2, 50, CANVAS_HEIGHT * 2, opt) // right
-    ];
+    const opt = { isStatic: true, friction: 0.05, restitution: 0.2 };
+    
+    walls = [];
+    const segments = 30;
+    const centerX = CANVAS_WIDTH / 2;
+    const radiusX = CANVAS_WIDTH * 0.48;
+    const radiusY = CANVAS_HEIGHT * 0.52; // Slightly taller bowl for the frame
+
+    // Create a semi-oval bowl. The bottom is at CANVAS_HEIGHT - 5px
+    const bottomBaseline = CANVAS_HEIGHT - 10;
+
+    for (let i = 0; i <= segments; i++) {
+        const theta = Math.PI + Math.PI * (i / segments);
+        const x = centerX + radiusX * Math.cos(theta);
+        const centerY = bottomBaseline - radiusY;
+        const y = centerY - radiusY * Math.sin(theta);
+
+        const nextTheta = Math.PI + Math.PI * ((i + 1) / segments);
+        const nextX = centerX + radiusX * Math.cos(nextTheta);
+        const nextY = centerY - radiusY * Math.sin(nextTheta);
+        
+        const midX = (x + nextX) / 2;
+        const midY = (y + nextY) / 2;
+        const angle = Math.atan2(nextY - y, nextX - x);
+        const length = Math.sqrt(Math.pow(nextX - x, 2) + Math.pow(nextY - y, 2)) + 2;
+
+        const segment = Bodies.rectangle(midX, midY, length, 40, {
+            ...opt,
+            angle: angle
+        });
+        walls.push(segment);
+    }
+    
+    // Add top "guard" walls to keep things from flying out sideways if they jump
+    walls.push(Bodies.rectangle(-20, CANVAS_HEIGHT/2, 40, CANVAS_HEIGHT, { isStatic: true }));
+    walls.push(Bodies.rectangle(CANVAS_WIDTH + 20, CANVAS_HEIGHT/2, 40, CANVAS_HEIGHT, { isStatic: true }));
+
     Composite.add(world, walls);
 }
 
@@ -55,7 +94,9 @@ let lastPos = {x: 0, y: 0};
 const ACTIVE_SKILL = {
     isKurutogaDrive: false,
     isJetstreamSmooth: false,
-    isMackeePaint: false
+    isMackeePaint: false,
+    isMechActive: false,
+    isBallActive: false
 };
 
 // Preload Images
@@ -72,10 +113,18 @@ loadImages();
 // Pick types that can spawn (Equipped + 4 random others)
 let stageTypes = [];
 function initStageTypes() {
-    stageTypes = [GAME_STATE.equippedChar];
-    const available = Object.keys(STATIONERY_DATA).filter(k => k !== GAME_STATE.equippedChar);
-    available.sort(() => 0.5 - Math.random());
-    stageTypes = stageTypes.concat(available.slice(0, 4));
+    // Ensure we have 5 unique types including the equipped one
+    const equipped = GAME_STATE.equippedChar || 'mono';
+    const all = Object.keys(STATIONERY_DATA);
+    const others = all.filter(k => k !== equipped);
+    
+    // Shuffle others
+    for (let i = others.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [others[i], others[j]] = [others[j], others[i]];
+    }
+    
+    stageTypes = [equipped].concat(others.slice(0, 4));
 }
 
 // UI Elements
@@ -187,34 +236,83 @@ function spawnItem(forceType = null) {
     items.push(body);
 }
 
-// Interaction
+// Interaction - Direct Catch Style (Handles scaling/padding automatically)
 function getEventPos(e) {
+    if (!canvas) return lastPos;
+    
+    // 1. Prioritize offsetX / offsetY for Pointer/Mouse (Most stable)
+    if (typeof e.offsetX !== 'undefined' && e.target === canvas) {
+        return { x: e.offsetX, y: e.offsetY };
+    }
+    
+    // 2. Fallback for Touch (Calculate relative to element rect)
     const rect = canvas.getBoundingClientRect();
     const evt = e.touches ? e.touches[0] : e;
     if(!evt) return lastPos;
+    
     return {
-        x: evt.clientX - rect.left,
-        y: evt.clientY - rect.top
+        x: (evt.clientX - rect.left),
+        y: (evt.clientY - rect.top)
     };
+}
+
+// Pencil Trace Effect (Visual Feedback)
+function createPencilTrace(pos) {
+    const parent = document.getElementById('effects-layer') || document.body;
+    const dot = document.createElement('div');
+    dot.className = 'pencil-trace';
+    
+    // Add small random offset for "scribble" look
+    const rx = (Math.random() - 0.5) * 10;
+    const ry = (Math.random() - 0.5) * 10;
+    
+    dot.style.left = `${pos.x + rx}px`;
+    dot.style.top = `${pos.y + ry}px`;
+    
+    parent.appendChild(dot);
+    
+    // Fade out and remove
+    dot.animate([
+        { opacity: 0.8, transform: 'scale(1) rotate(0deg)' },
+        { opacity: 0, transform: 'scale(0.5) rotate(45deg)' }
+    ], { duration: 400, easing: 'ease-out' }).onfinish = () => dot.remove();
 }
 
 canvas.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    if(GAME_STATE.isPaused) return; // PAUSE GUARD
     if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     isDragging = true;
     lastPos = getEventPos(e);
+    lastCheckedPos = { ...lastPos }; // For interpolation
     connectedPath = [];
+    
+    createPencilTrace(lastPos); // Feedback!
+    
+    // Ballpoint Skill: Auto Chain on touch
+    if (ACTIVE_SKILL.isBallActive) {
+        const bodiesUnder = Matter.Query.point(items, lastPos);
+        if (bodiesUnder.length > 0) {
+            autoChain(bodiesUnder[0]);
+            isDragging = false; // Don't start normal drag if auto-chained
+            return;
+        }
+    }
+
     checkIntersection(lastPos);
 });
 
+let lastCheckedPos = {x:0, y:0};
+
 canvas.addEventListener('pointermove', (e) => {
     e.preventDefault();
+    if(GAME_STATE.isPaused) return; // PAUSE GUARD
     if (!isDragging) return;
-    lastPos = getEventPos(e);
+    const newPos = getEventPos(e);
     
     if (ACTIVE_SKILL.isMackeePaint) {
         // Oil Paint: delete everything under the cursor immediately and convert to coins
-        const bodiesUnder = Matter.Query.point(items, lastPos);
+        const bodiesUnder = Matter.Query.point(items, newPos);
         if (bodiesUnder.length > 0) {
             const b = bodiesUnder[0];
             createDOMEffect('explosion-effect', b.position, 50, '#1a202c');
@@ -224,11 +322,34 @@ canvas.addEventListener('pointermove', (e) => {
             updateUI();
         }
     } else {
-        checkIntersection(lastPos);
+        // Interpolation for fast swipes: check segments
+        interpolateCheck(lastCheckedPos, newPos);
+        checkIntersection(newPos);
+        
+        if (Math.random() > 0.6) createPencilTrace(newPos); // Feedback during drag
     }
+    
+    lastCheckedPos = { ...newPos };
+    lastPos = newPos;
 });
 
+function interpolateCheck(p1, p2) {
+    const dist = Vector.magnitude(Vector.sub(p1, p2));
+    if (dist < 10) return; // Skip if too small
+
+    const steps = Math.ceil(dist / 15); // Check every 15px
+    for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const middlePos = {
+            x: p1.x + (p2.x - p1.x) * t,
+            y: p1.y + (p2.y - p1.y) * t
+        };
+        checkIntersection(middlePos);
+    }
+}
+
 window.addEventListener('pointerup', () => {
+    if(GAME_STATE.isPaused) return; // PAUSE GUARD
     if (!isDragging) return;
     isDragging = false;
     
@@ -261,6 +382,11 @@ window.addEventListener('pointerup', () => {
             updateSkillGaugeUI();
         }
         
+        // Mechanical Pencil Skill: Area Line Cut
+        if (ACTIVE_SKILL.isMechActive && connectedPath.length >= 2) {
+            lineAreaClear(connectedPath[0].position, connectedPath[connectedPath.length - 1].position);
+        }
+
         removeBodies(connectedPath);
         
         // Combo multiplier / score
@@ -272,27 +398,39 @@ window.addEventListener('pointerup', () => {
 });
 
 function checkIntersection(pos) {
-    // 指の周りの大まかな範囲で拾う（つなぎやすさUP）
-    const searchRad = 20; 
-    const bounds = {
-        min: { x: pos.x - searchRad, y: pos.y - searchRad },
-        max: { x: pos.x + searchRad, y: pos.y + searchRad }
-    };
-    const bodiesUnder = Matter.Query.region(items, bounds);
+    if(GAME_STATE.isPaused) return; // PAUSE GUARD
+    
+    // 1. まずはピンポイントで触れているものを探す
+    let bodiesUnder = Matter.Query.point(items, pos);
+    
+    // 2. 周辺をさらに広い円形でスキャン（なぞりやすさ向上）
+    if (bodiesUnder.length === 0) {
+        const touchRadius = 30; // 半径縮小に伴い微調整
+        const bounds = {
+            min: { x: pos.x - touchRadius, y: pos.y - touchRadius },
+            max: { x: pos.x + touchRadius, y: pos.y + touchRadius }
+        };
+        bodiesUnder = Matter.Query.region(items, bounds);
+        
+        // 「指の跡」に近い順、かつ「現在繋いでいる種類」に近いものを優先する
+        bodiesUnder.sort((a, b) => {
+            const distA = Vector.magnitude(Vector.sub(a.position, pos));
+            const distB = Vector.magnitude(Vector.sub(b.position, pos));
+            
+            // すでに繋がっている経路の最後尾に近い方を優先する（マグネット効果）
+            if (connectedPath.length > 0) {
+                const last = connectedPath[connectedPath.length - 1];
+                const dPathA = Vector.magnitude(Vector.sub(a.position, last.position));
+                const dPathB = Vector.magnitude(Vector.sub(b.position, last.position));
+                return (distA + dPathA * 0.5) - (distB + dPathB * 0.5);
+            }
+            return distA - distB;
+        });
+    }
 
     if (bodiesUnder.length > 0) {
-        // 最も指に近い body を選択する
+        // ... previous body selection logic ...
         let body = bodiesUnder[0];
-        let minDist = Vector.magnitude(Vector.sub(body.position, pos));
-        for (let i = 1; i < bodiesUnder.length; i++) {
-            const d = Vector.magnitude(Vector.sub(bodiesUnder[i].position, pos));
-            if(d < minDist) {
-                minDist = d;
-                body = bodiesUnder[i];
-            }
-        }
-        
-        // Check if visible (Frixion logic)
         if (body.render && body.render.opacity === 0) return;
         
         if (connectedPath.length === 0) {
@@ -312,8 +450,8 @@ function checkIntersection(pos) {
                 // Add
                 if (!connectedPath.includes(body)) {
                     const dist = Vector.magnitude(Vector.sub(body.position, lastInPath.position));
-                    // しきい値を広げて遠くても吸い付くようにする
-                    const threshold = ACTIVE_SKILL.isKurutogaDrive ? ITEM_RADIUS * 6.5 : ITEM_RADIUS * 4.5;
+                    // しきい値をさらに広げて、より離れていても吸い付くように調整
+                    const threshold = ACTIVE_SKILL.isKurutogaDrive ? ITEM_RADIUS * 12.0 : ITEM_RADIUS * 9.5;
                     if (dist < threshold) {
                         connectedPath.push(body);
                         playScribbleSound(); // 鉛筆の音
@@ -344,11 +482,81 @@ function absorbAround(p1, p2) {
 }
 
 function removeBody(body) {
+    spawnFlyingCoins(body.position, 1);
     Composite.remove(world, body);
     items = items.filter(b => b !== body);
 }
 
+// Multi-pen Skill Helpers
+function autoChain(startBody) {
+    const type = startBody.stationeryType;
+    if (!type || startBody.isWoodBomb || startBody.isInkBomb) return;
+    
+    const chain = [startBody];
+    const visited = new Set();
+    visited.add(startBody);
+    
+    const queue = [startBody];
+    while(queue.length > 0) {
+        const current = queue.shift();
+        const nearby = items.filter(b => 
+            !visited.has(b) && 
+            b.stationeryType === type && 
+            !b.isWoodBomb && !b.isInkBomb &&
+            Vector.magnitude(Vector.sub(b.position, current.position)) < ITEM_RADIUS * 3.5
+        );
+        nearby.forEach(b => {
+            visited.add(b);
+            chain.push(b);
+            queue.push(b);
+        });
+    }
+    
+    if (chain.length >= 3) {
+        playScribbleSound();
+        createDOMEffect('explosion-effect', startBody.position, 150, 'rgba(255,255,255,0.5)');
+        removeBodies(chain);
+        GAME_STATE.score += chain.length * 120;
+        
+        // Gauge contribution
+        if (type === GAME_STATE.equippedChar) {
+            GAME_STATE.skillGauge += chain.length;
+            updateSkillGaugeUI();
+        }
+        updateUI();
+    }
+}
+
+function lineAreaClear(p1, p2) {
+    const width = 120;
+    const toRemove = items.filter(b => distToSegment(b.position, p1, p2) < width);
+    
+    if (toRemove.length > 0) {
+        playKnockSound();
+        createLineEffect(Vector.div(Vector.add(p1, p2), 2), Vector.angle(Vector.sub(p2, p1)), width);
+        
+        // Show line visual
+        const mid = Vector.div(Vector.add(p1, p2), 2);
+        createDOMEffect('explosion-effect', mid, width * 2, 'rgba(200,200,240,0.4)');
+        
+        GAME_STATE.score += toRemove.length * 80;
+        removeBodies(toRemove);
+        updateUI();
+    }
+}
+
+function distToSegment(p, v, w) {
+    const l2 = Vector.magnitudeSquared(Vector.sub(v, w));
+    if (l2 === 0) return Vector.magnitude(Vector.sub(p, v));
+    let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Vector.magnitude(Vector.sub(p, { x: v.x + t * (w.x - v.x), y: v.y + t * (w.y - v.y) }));
+}
+
 function removeBodies(bodiesToRemove) {
+    bodiesToRemove.forEach(b => {
+        spawnFlyingCoins(b.position, 1);
+    });
     Composite.remove(world, bodiesToRemove);
     items = items.filter(b => !bodiesToRemove.includes(b));
 }
@@ -496,6 +704,22 @@ function executeSkill(char) {
                 }, 1000);
             }, 500);
             break;
+            
+        case 'multi_knock':
+            // Multi-function Pen Overhauled
+            if (!ACTIVE_SKILL.isMechActive) {
+                ACTIVE_SKILL.isMechActive = true;
+                setTimeout(() => ACTIVE_SKILL.isMechActive = false, 10000);
+            } else if (!ACTIVE_SKILL.isBallActive) {
+                ACTIVE_SKILL.isBallActive = true;
+                setTimeout(() => ACTIVE_SKILL.isBallActive = false, 10000);
+            } else {
+                // If both active, just refresh someone? 
+                // Or maybe the user meant they stick together.
+                // Let's just say both are refreshed if used again.
+            }
+            updateUI();
+            break;
     }
 }
 
@@ -552,6 +776,63 @@ function createLineEffect(origin, angle, width) {
 function updateUI() {
     const s = document.getElementById('score');
     if(s) s.innerText = GAME_STATE.score;
+    
+    // Coin update: Show session coins during play
+    const gc = document.getElementById('game-coin-count');
+    if(gc) gc.innerText = GAME_STATE.currentSessionCoins;
+}
+
+function spawnFlyingCoins(pos, count) {
+    const layer = document.getElementById('effects-layer');
+    if (!layer) return;
+
+    for (let i = 0; i < count; i++) {
+        const coin = document.createElement('div');
+        coin.className = 'flying-coin';
+        coin.innerHTML = '🪙';
+        
+        layer.appendChild(coin);
+        
+        // Start at item position
+        coin.style.left = `${pos.x}px`;
+        coin.style.top = `${pos.y}px`;
+
+        // Standard destination: Game Coin Board is at approx top-right
+        const target = document.querySelector('.paper-label-coin');
+        if (!target) {
+            // Failsafe: just remove coin and increment count if target missing
+            coin.remove();
+            GAME_STATE.currentSessionCoins += 1;
+            updateUI();
+            return;
+        }
+
+        const targetRect = target.getBoundingClientRect();
+        const screenRect = document.getElementById('app').getBoundingClientRect();
+        
+        // Relative to app/layer
+        const targetX = targetRect.left - screenRect.left + targetRect.width / 2;
+        const targetY = targetRect.top - screenRect.top + targetRect.height / 2;
+
+        // Animate
+        const duration = 600 + Math.random() * 200;
+        const jumpY = -50 - Math.random() * 100;
+
+        coin.animate([
+            { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+            { transform: `translate(${(targetX - pos.x) / 4}px, ${jumpY}px) scale(1.5)`, opacity: 1, offset: 0.3 },
+            { transform: `translate(${targetX - pos.x}px, ${targetY - pos.y}px) scale(0.5)`, opacity: 0 }
+        ], {
+            duration: duration,
+            easing: 'cubic-bezier(0.42, 0, 0.58, 1)'
+        }).onfinish = () => {
+            coin.remove();
+            if(!GAME_STATE.isPaused) {
+                GAME_STATE.currentSessionCoins += 1;
+                updateUI();
+            }
+        };
+    }
 }
 
 // Spawner
@@ -587,6 +868,7 @@ let timerInterval;
 function startTimer() {
     if(timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
+        if(GAME_STATE.isPaused) return; // Skip logic while paused
         if(GAME_STATE.time > 0) {
             GAME_STATE.time--;
             const t = document.getElementById('time');
@@ -604,9 +886,22 @@ function stopTimer() {
 
 // Render Loop
 function render() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Items
+    // Draw Oval Field (Tray) Guide
+    ctx.beginPath();
+    ctx.ellipse(CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.4, CANVAS_WIDTH * 0.48, CANVAS_HEIGHT * 0.56, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(74, 85, 104, 0.1)'; 
+    ctx.lineWidth = 4;
+    ctx.setLineDash([10, 5]); // Hand-drawn dashed look
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Draw background "dish" fill
+    ctx.fillStyle = 'rgba(74, 85, 104, 0.03)';
+    ctx.fill();
+    
+    // IMPORTANT: Draw ONLY items in the items array (prevents ghosting/walls/overlapping)
     items.forEach(body => {
         if (body.render && body.render.opacity === 0) return; // Invisible
         
@@ -689,25 +984,43 @@ function render() {
         drawPath({x:0, y:0}, 5, '0.8', baseColor);
     }
     
-    // Mackee active hint
-    if (ACTIVE_SKILL.isMackeePaint) {
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.font = '20px sans-serif';
-        ctx.fillText('マッキーモード：画面をなぞり消せ！', 20, 30);
-    }
-    
     requestAnimationFrame(render);
 }
+
+window.togglePause = function() {
+    GAME_STATE.isPaused = !GAME_STATE.isPaused;
+    
+    const overlay = document.getElementById('pause-overlay');
+    
+    if(GAME_STATE.isPaused) {
+        // Pausing
+        if(gameRunner) Runner.stop(gameRunner);
+        if(overlay) overlay.classList.remove('hidden');
+    } else {
+        // Resuming
+        if(gameRunner) Runner.run(gameRunner, engine);
+        if(overlay) overlay.classList.add('hidden');
+    }
+};
 
 // Global Control
 let gameRunner = null;
 let renderHandle = null;
 
 window.startGame = function() {
+    updateCanvasSize();
+    
+    // Critical: Clear everything including old residual bodies
+    Composite.clear(world, false); 
+    items = [];
+    walls = [];
+    
     createWalls();
     GAME_STATE.score = 0;
     GAME_STATE.time = 60;
     GAME_STATE.skillGauge = 0;
+    GAME_STATE.currentSessionCoins = 0;
+    GAME_STATE.isPaused = false;
     Object.keys(ACTIVE_SKILL).forEach(k => ACTIVE_SKILL[k] = false);
     
     updateUI();
@@ -720,7 +1033,6 @@ window.startGame = function() {
         skillCharImg.src = STATIONERY_DATA[GAME_STATE.equippedChar].imageSrc;
     }
     
-    removeBodies([...items]); 
     initStageTypes();
     
     if(!gameRunner) {
@@ -742,5 +1054,15 @@ window.stopGame = function() {
     if(gameRunner) {
         Runner.stop(gameRunner);
     }
+    
+    // Add session coins to total
+    GAME_STATE.coins += GAME_STATE.currentSessionCoins;
+    saveCoins();
+    
+    // Update Home/Shop UI
+    document.querySelectorAll('#coin-count, #shop-coin-count').forEach(el => {
+        el.innerText = GAME_STATE.coins;
+    });
+
     removeBodies([...items]);
 };

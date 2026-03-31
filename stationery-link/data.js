@@ -131,6 +131,16 @@ const STATIONERY_DATA = {
         color: '#b7791f',
         skillType: 'aging_glow',
         skillCost: 20
+    },
+    'multi_pen': {
+        id: 'multi_pen',
+        name: '多機能ペン',
+        groupId: 6,
+        description: 'ノックでシャーペンとボールペンが切り替わる！',
+        imageSrc: 'assets/multi_pen.png',
+        color: '#2d3748',
+        skillType: 'multi_knock',
+        skillCost: 15
     }
 };
 
@@ -143,7 +153,11 @@ const GAME_STATE = {
     unlockedChars: JSON.parse(localStorage.getItem('stationeryLink_unlocked') || '["mono"]'),
     equippedChar: localStorage.getItem('stationeryLink_equipped') || 'mono',
     // New fields for skill system
-    skillGauge: 0
+    skillGauge: 0,
+    multiPenCount: 0,
+    multiPenMode: 'mechanical', // 'mechanical' or 'ballpoint'
+    currentSessionCoins: 0,
+    isPaused: false
 };
 
 function savePlayCount() {

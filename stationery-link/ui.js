@@ -5,20 +5,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const screens = document.querySelectorAll('.screen');
     const sideNav = document.getElementById('side-nav');
 
+    let isTransitioning = false;
+
     function switchScreen(targetId) {
-        screens.forEach(s => s.classList.remove('active'));
-        navItems.forEach(n => n.classList.remove('active'));
-
+        if (isTransitioning) return;
+        const oldScreen = document.querySelector('.screen.active');
         const targetScreen = document.getElementById(targetId);
-        targetScreen.classList.add('active');
-
-        // Update nav active state (unless viewing play screen)
-        if(targetId !== 'view-play') {
+        
+        if (oldScreen === targetScreen) return;
+        
+        if (oldScreen) {
+            isTransitioning = true;
+            
+            // Start animations
+            oldScreen.classList.add('page-turn-exit');
+            targetScreen.classList.add('active', 'page-turn-enter');
+            
+            // Update nav active state immediately for better feedback
+            navItems.forEach(n => n.classList.remove('active'));
             const navItem = document.querySelector(`.nav-item[data-target="${targetId}"]`);
             if(navItem) navItem.classList.add('active');
-            if(sideNav) sideNav.style.display = 'flex'; // show nav
+
+            setTimeout(() => {
+                oldScreen.classList.remove('active', 'page-turn-exit');
+                targetScreen.classList.remove('page-turn-enter');
+                isTransitioning = false;
+            }, 600); // matching CSS animation duration
         } else {
-            if(sideNav) sideNav.style.display = 'none'; // hide nav during play
+            targetScreen.classList.add('active');
+        }
+
+        // Side Nav Visibility
+        if(targetId === 'view-play') {
+            if(sideNav) sideNav.style.display = 'none';
+        } else {
+            if(sideNav) sideNav.style.display = 'flex';
         }
     }
 
@@ -60,27 +81,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Exit Game Button (Testing)
-    document.getElementById('btn-exit-game').addEventListener('click', () => {
-        if(typeof stopGame === 'function') {
-            stopGame();
-        }
-        
-        // Save score if High Score
-        const hs = parseInt(localStorage.getItem('stationeryLink_highScore') || '0', 10);
-        if(GAME_STATE.score > hs) {
-            localStorage.setItem('stationeryLink_highScore', GAME_STATE.score.toString());
-        }
-        
-        updateStatsUI();
-        // Convert score to coins (e.g. 1% of score)
-        const earnedCoins = Math.floor(GAME_STATE.score * 0.01);
-        GAME_STATE.coins += earnedCoins;
-        saveCoins();
-        
-        switchScreen('view-home');
-        alert(`ゲーム終了！\nスコア: ${GAME_STATE.score}\n獲得コイン: ${earnedCoins}`);
-    });
+    // Quit Game Button (Now in pause menu)
+    const quitBtn = document.getElementById('btn-quit-game');
+    if(quitBtn) {
+        quitBtn.addEventListener('click', () => {
+            if(GAME_STATE.isPaused) window.togglePause(); // Resume internals before stopping clean
+            
+            if(typeof stopGame === 'function') {
+                stopGame();
+            }
+            
+            // Save score if High Score
+            const hs = parseInt(localStorage.getItem('stationeryLink_highScore') || '0', 10);
+            if(GAME_STATE.score > hs) {
+                localStorage.setItem('stationeryLink_highScore', GAME_STATE.score.toString());
+            }
+            
+            updateStatsUI();
+            // Convert score to coins (e.g. 1% of score)
+            const earnedCoins = Math.floor(GAME_STATE.score * 0.01);
+            GAME_STATE.coins += earnedCoins;
+            saveCoins();
+            
+            switchScreen('view-home');
+            alert(`ゲーム終了！\nスコア: ${GAME_STATE.score}\n獲得コイン: ${earnedCoins}`);
+        });
+    }
 
     let currentPreviewCharId = GAME_STATE.equippedChar;
 
@@ -226,7 +252,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add UI global function
     window.onGameOver = function() {
         // Triggered by game.js when time finishes
-        document.getElementById('btn-exit-game').click();
+        const quitBtn = document.getElementById('btn-quit-game');
+        if(quitBtn) quitBtn.click();
     };
 
 });
